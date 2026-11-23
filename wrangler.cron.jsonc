@@ -2,6 +2,9 @@
   "name": "cavebettor-sync-cron",
   "main": "workers/sync-cron.ts",
   "compatibility_date": "2026-09-01",
+  "vars": {
+    "SYNC_URL": "https://cavebettor.ewinproject.org/api/sync"
+  },
   "triggers": {
     "crons": ["*/15 * * * *"]
   }
