@@ -69,6 +69,17 @@ export interface Fixture {
   h2h: { homeWins: number; draws: number; awayWins: number; last: string[] };
   lineups?: { home: string[]; away: string[] };
   stats?: LiveStats;
+  /** Tennis court surface. */
+  surface?: 'hard' | 'clay' | 'grass' | 'indoor';
+  bestOfFive?: boolean;
+  /** Sport-native scoring detail used by settlement and backtests. */
+  detail?: {
+    regulation?: { home: number; away: number };
+    overtime?: boolean;
+    sets?: { home: number; away: number }[];
+    innings?: { home: number[]; away: number[] };
+    firstFive?: { home: number; away: number };
+  };
 }
 
 export interface LiveStats {
@@ -137,8 +148,23 @@ export interface ScoreCell {
   total: number;
 }
 
+export interface AnalysisMetric {
+  id: string;
+  label: string;
+  value: number | string;
+  display: string;
+  hint: string;
+  tone: 'positive' | 'negative' | 'neutral';
+}
+
 export interface Prediction {
   fixtureId: string;
+  sport: SportId;
+  scoreUnit: string;
+  marketContext: string;
+  modelLabel: string;
+  settlement: string;
+  metrics: AnalysisMetric[];
   generatedAt: string;
   modelVersion: string;
   ensembleVersion: string;
@@ -168,6 +194,8 @@ export interface Prediction {
 export interface ValueBet {
   market: string;
   marketId: string;
+  marketGroup?: MarketGroup;
+  outcomeId?: string;
   selection: string;
   odds: number;
   modelProbability: number;
@@ -182,6 +210,8 @@ export interface ValueBet {
 export interface Recommendation {
   selection: string;
   market: string;
+  marketId?: string;
+  outcomeId?: string;
   odds: number;
   modelProbability: number;
   stakeNgn: number;
@@ -347,4 +377,91 @@ export interface AnalyticsSummary {
   roiByMarket: { market: string; bets: number; roi: number; strike: number }[];
   monthly: { month: string; bets: number; stakedNgn: number; profitNgn: number; roi: number }[];
   calibration: { bucket: string; predicted: number; observed: number; count: number }[];
+}
+
+
+/* ── Backtesting ─────────────────────────────────────────────────────────── */
+
+export interface BacktestBet {
+  id: string;
+  fixtureId: string;
+  fixtureLabel: string;
+  league: string;
+  kickoff: string;
+  marketId: string;
+  marketGroup: MarketGroup;
+  market: string;
+  selection: string;
+  outcomeId?: string;
+  side: 'home' | 'away' | 'draw' | 'neutral';
+  odds: number;
+  closingOdds: number;
+  modelProbability: number;
+  edge: number;
+  stakeNgn: number;
+  result: 'won' | 'lost' | 'push';
+  pnlNgn: number;
+  clv: number;
+  settledAt: string;
+}
+
+export interface BacktestWindow {
+  window: string;
+  fixtures: number;
+  bets: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  stakedNgn: number;
+  profitNgn: number;
+  roi: number;
+  strikeRate: number;
+  brier: number;
+}
+
+export interface BacktestSummary {
+  sport: SportId;
+  model: string;
+  version: string;
+  seasons: string;
+  benchmark: string;
+  settlement: string;
+  description: string;
+  fixtures: number;
+  bets: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  stakedNgn: number;
+  profitNgn: number;
+  roi: number;
+  yieldPct: number;
+  strikeRate: number;
+  avgOdds: number;
+  brier: number;
+  logLoss: number;
+  clv: number;
+  maxDrawdown: number;
+  calibration: { bucket: string; predicted: number; observed: number; count: number }[];
+  byMarket: { market: string; marketId: string; bets: number; wins: number; pushes: number; roi: number; strikeRate: number; profitNgn: number }[];
+  windows: BacktestWindow[];
+  equity: { index: number; bankrollNgn: number; pnlNgn: number }[];
+  recent: BacktestBet[];
+  generatedAt: string;
+}
+
+export interface BetslipPick {
+  fixtureId: string;
+  fixtureLabel: string;
+  league: string;
+  sport: SportId;
+  kickoff: string;
+  marketId: string;
+  market: string;
+  outcomeId: string;
+  selection: string;
+  odds: number;
+  modelProbability: number;
+  bookmaker: string;
+  confidence: number;
 }

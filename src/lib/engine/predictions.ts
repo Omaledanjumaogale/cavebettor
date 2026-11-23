@@ -1,5 +1,7 @@
 import { BOOKMAKERS, LEAGUE_MAP, MODELS, TEAM_MAP } from '#lib/data/catalog';
+import { sportProfile } from '#lib/data/sportProfiles';
 import type {
+  AnalysisMetric,
   Fixture,
   Insight,
   Market,
@@ -24,10 +26,23 @@ import {
   seeded
 } from './core';
 import { expectedScore } from './fixtures';
+import { buildMarkets } from './markets';
 
 const MAX_GOALS = 8;
 const GRID = Array.from({ length: MAX_GOALS + 1 }, (_, i) => i);
 export const PAPER_BANKROLL_NGN = 1_250_000;
+
+interface PeriodModel {
+  id: string;
+  label: string;
+  home: number;
+  draw: number;
+  away: number;
+  total: number;
+  line: number;
+  over: number;
+  under: number;
+}
 
 interface CoreModel {
   home: number;
@@ -43,6 +58,8 @@ interface CoreModel {
   spread?: { line: number; homeCover: number; awayCover: number };
   totalLine?: { line: number; over: number; under: number };
   moneyline?: { home: number; away: number };
+  periods: PeriodModel[];
+  halves?: { first: ScoreCell[]; second: ScoreCell[] };
   margin: number;
   sd: number;
 }
@@ -103,6 +120,70 @@ function poissonGrid(lambdaHome: number, lambdaAway: number, rho: number): numbe
   return normalizeGrid(matrix);
 }
 
+function periodFromGrid(id: string, label: string, grid: number[][], line: number): PeriodModel {
+  const cells = cellsFromGrid(grid);
+  const total = cells.reduce((a, c) => a + c.probability * (c.home + c.away), 0);
+  let home = 0;
+  let draw = 0;
+  let away = 0;
+  let over = 0;
+  for (const c of cells) {
+    if (c.home > c.away) home += c.probability;
+    else if (c.home === c.away) draw += c.probability;
+    else away += c.probability;
+    if (c.home + c.away > line) over += c.probability;
+  }
+  return { id, label, home, draw, away, total, line, over, under: 1 - over };
+}
+
+function normalPeriod(
+  id: string,
+  label: string,
+  meanMargin: number,
+  meanTotal: number,
+  sdMargin: number,
+  sdTotal: number,
+  line: number
+): PeriodModel {
+  // A period can finish level (halftime / quarter); the draw band is
+  // half a point either side of zero.
+  const draw = normalCdf(0.5 / sdMargin) - normalCdf(-0.5 / sdMargin);
+  const home = normalCdf((meanMargin - 0.5) / sdMargin);
+  const away = Math.max(0, 1 - home - draw);
+  const over = 1 - normalCdf((line - meanTotal) / sdTotal);
+  return { id, label, home, draw, away, total: meanTotal, line, over, under: 1 - over };
+}
+
+function solveSetProbability(matchProb: number, bestOfFive: boolean): number {
+  // Invert the best-of-three/five set formula. A small binary search keeps
+  // set and game markets consistent with the match-winner probability.
+  const target = clamp(matchProb, 0.01, 0.99);
+  let lo = 0.01;
+  let hi = 0.99;
+  for (let i = 0; i < 40; i++) {
+    const s = (lo + hi) / 2;
+    const p = bestOfFive
+      ? s ** 3 + 3 * s ** 3 * (1 - s) + 6 * s ** 3 * (1 - s) ** 2
+      : s ** 2 + 2 * s ** 2 * (1 - s);
+    if (p < target) lo = s;
+    else hi = s;
+  }
+  return (lo + hi) / 2;
+}
+
+function footballHTFTProbs(first: ScoreCell[], second: ScoreCell[]): number[] {
+  const outcomes = Array(9).fill(0);
+  const idx = (h: number, a: number) => (h > a ? 0 : h === a ? 1 : 2);
+  for (const f of first) {
+    for (const s of second) {
+      const ht = idx(f.home, f.away);
+      const ft = idx(f.home + s.home, f.away + s.away);
+      outcomes[ht * 3 + ft] += f.probability * s.probability;
+    }
+  }
+  return outcomes;
+}
+
 function footballCore(fixture: Fixture): CoreModel {
   const home = TEAM_MAP[fixture.homeId];
   const away = TEAM_MAP[fixture.awayId];
@@ -117,6 +198,10 @@ function footballCore(fixture: Fixture): CoreModel {
   const lambdaH = clamp(expected.home * remaining, 0.05, 4.4);
   const lambdaA = clamp(expected.away * remaining, 0.05, 4.2);
   const grid = poissonGrid(lambdaH, lambdaA, rho);
+  const firstGrid = poissonGrid(clamp(lambdaH * 0.45, 0.02, 3.4), clamp(lambdaA * 0.45, 0.02, 3.2), rho);
+  const secondGrid = poissonGrid(clamp(lambdaH * 0.55, 0.02, 3.8), clamp(lambdaA * 0.55, 0.02, 3.6), rho);
+  const periods = [periodFromGrid('ht', 'First half', firstGrid, 1.5)];
+  const halves = { first: cellsFromGrid(firstGrid), second: cellsFromGrid(secondGrid) };
 
   // In-play probabilities must include the goals already on the board.
   const summary = summarizeGrid(grid, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
@@ -131,6 +216,8 @@ function footballCore(fixture: Fixture): CoreModel {
         home: clamp(summary.home + summary.draw * 0.58, 0.01, 0.97),
         away: clamp(summary.away + summary.draw * 0.42, 0.01, 0.97)
       },
+      periods,
+      halves,
       margin: 0,
       sd: 1
     };
@@ -139,6 +226,8 @@ function footballCore(fixture: Fixture): CoreModel {
   return {
     ...summary,
     expected: { ...expected, total: expected.home + expected.away },
+    periods,
+    halves,
     margin: 0,
     sd: 1
   };
@@ -156,6 +245,9 @@ function hockeyCore(fixture: Fixture): CoreModel {
   const lambdaA = expected.away * remaining;
   const grid = poissonGrid(lambdaH, lambdaA, rho);
   const summary = summarizeGrid(grid, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
+  const periods = [1, 2, 3].map((n) =>
+    periodFromGrid(`p${n}`, `Period ${n}`, poissonGrid(clamp(lambdaH / 3, 0.01, 2.2), clamp(lambdaA / 3, 0.01, 2.1), rho), 1.5)
+  );
   const homeMl = clamp(summary.home + summary.draw * 0.54, 0.02, 0.96);
   const awayMl = clamp(summary.away + summary.draw * 0.46, 0.02, 0.96);
   const total = live
@@ -171,8 +263,15 @@ function hockeyCore(fixture: Fixture): CoreModel {
     draw: summary.draw,
     expected: { ...expected, total },
     moneyline: { home: homeMl, away: awayMl },
-    spread: { line: -1.5, homeCover: clamp(normalCdf((margin - 1.5) / 2.3), 0.03, 0.97), awayCover: 1 - clamp(normalCdf((margin - 1.5) / 2.3), 0.03, 0.97) },
-    totalLine: { line: 5.5, over: 1 - normalCdf((5.5 - total) / 2.1), under: normalCdf((5.5 - total) / 2.1) },
+    spread: (() => {
+      const cover = clamp(1 - normalCdf((1.5 - margin) / 2.3), 0.02, 0.98);
+      return { line: -1.5, homeCover: cover, awayCover: 1 - cover };
+    })(),
+    totalLine: (() => {
+      const over = clamp(1 - normalCdf((5.5 - total) / 2.1), 0.02, 0.98);
+      return { line: 5.5, over, under: 1 - over };
+    })(),
+    periods,
     margin,
     sd: 2.3
   };
@@ -195,8 +294,14 @@ function basketballCore(fixture: Fixture): CoreModel {
   const homeProb = clamp(normalCdf(margin / sdMargin), 0.03, 0.97);
   const line = Math.round(margin * 2) / 2;
   const totalLine = Math.round(total * 2) / 2;
-  const homeCover = clamp(normalCdf((margin - line) / sdMargin), 0.02, 0.98);
+  const homeCover = clamp(1 - normalCdf((line - margin) / sdMargin), 0.02, 0.98);
   const over = clamp(1 - normalCdf((totalLine - total) / sdTotal), 0.02, 0.98);
+  const periods = [
+    normalPeriod('h1', 'First half', margin / 2, total / 2, sdMargin * 0.72, sdTotal * 0.72, Math.round((total / 2) * 2) / 2),
+    ...[1, 2, 3, 4].map((q) =>
+      normalPeriod(`q${q}`, `Quarter ${q}`, margin / 4, total / 4, sdMargin * 0.55, sdTotal * 0.55, Math.round((total / 4) * 2) / 2)
+    )
+  ];
 
   // Approximate scoreline cloud around the modal score.
   const iH = Math.round(finalHome);
@@ -218,11 +323,12 @@ function basketballCore(fixture: Fixture): CoreModel {
     away: 1 - homeProb,
     expected: { ...expected, total },
     grid,
-    btts: 0.92,
-    over15: 1,
-    over25: 1,
-    over35: 0.99,
+    btts: 0,
+    over15: 0,
+    over25: 0,
+    over35: 0,
     topScorelines,
+    periods,
     spread: { line, homeCover, awayCover: 1 - homeCover },
     totalLine: { line: totalLine, over, under: 1 - over },
     moneyline: { home: homeProb, away: 1 - homeProb },
@@ -250,21 +356,21 @@ function baseballCore(fixture: Fixture): CoreModel {
   const summary = summarizeGrid(normalized, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
   const total = live ? fixture.score.home + fixture.score.away + lambdaH + lambdaA : expected.home + expected.away;
   const margin = live ? fixture.score.home - fixture.score.away + lambdaH - lambdaA : expected.home - expected.away;
+  const periods = [periodFromGrid('f5', 'First 5 innings', poissonGrid(clamp(lambdaH * 5 / 9, 0.05, 5), clamp(lambdaA * 5 / 9, 0.05, 5), 0), 4.5)];
+  const cover = clamp(1 - normalCdf((1.5 - margin) / sd), 0.02, 0.98);
+  const over = clamp(1 - normalCdf((8.5 - total) / 3.1), 0.03, 0.97);
   return {
     ...summary,
     home: homeWin,
     draw: 0,
     away: 1 - homeWin,
     expected: { ...expected, total },
+    periods,
     grid: cellsFromGrid(normalized).filter((c) => c.home < 13 && c.away < 13),
     topScorelines: summary.topScorelines.filter((c) => c.home < 13 && c.away < 13).slice(0, 8),
     moneyline: { home: homeWin, away: 1 - homeWin },
-    spread: {
-      line: -1.5,
-      homeCover: clamp(normalCdf((margin - 1.5) / sd), 0.02, 0.98),
-      awayCover: 1 - clamp(normalCdf((margin - 1.5) / sd), 0.02, 0.98)
-    },
-    totalLine: { line: 8.5, over: clamp(1 - normalCdf((8.5 - total) / 3.1), 0.03, 0.97), under: clamp(normalCdf((8.5 - total) / 3.1), 0.03, 0.97) },
+    spread: { line: -1.5, homeCover: cover, awayCover: 1 - cover },
+    totalLine: { line: 8.5, over, under: 1 - over },
     margin,
     sd
   };
@@ -273,38 +379,42 @@ function baseballCore(fixture: Fixture): CoreModel {
 function tennisCore(fixture: Fixture): CoreModel {
   const home = TEAM_MAP[fixture.homeId];
   const away = TEAM_MAP[fixture.awayId];
-  const bestOfFive = fixture.leagueId === 'grandslam';
-  const eloDiff = home.elo - away.elo + 38;
+  const bestOfFive = fixture.bestOfFive ?? (fixture.leagueId === 'grandslam' && home.elo >= 2100 && away.elo >= 2100);
+  const eloDiff = home.elo - away.elo + 26;
   let winProb = 1 / (1 + Math.pow(10, -eloDiff / 400));
-  if (bestOfFive) winProb = clamp(winProb + (winProb > 0.5 ? 0.035 : -0.035), 0.03, 0.97);
   const seed = fixture.id;
   winProb = clamp(winProb + jitter(seed + 'tennis', 0.012), 0.03, 0.97);
-  const expected = expectedScore('tennis', home, away, 1);
-  const gamesTotal = expected.home + expected.away;
-  const line = 22.5;
-  const sd = bestOfFive ? 5.2 : 4.3;
-  const over = 1 - normalCdf((line - gamesTotal) / sd);
-  const handicapLine = Math.round((expected.home - expected.away) * 2) / 2;
+  const setProb = solveSetProbability(winProb, bestOfFive);
+  const setsToWin = bestOfFive ? 3 : 2;
+  const totalGames = bestOfFive ? 37.5 : 23.2;
+  const homeGames = totalGames * (0.5 + (winProb - 0.5) * 0.34);
+  const awayGames = totalGames - homeGames;
+  const line = bestOfFive ? 38.5 : 22.5;
+  const sd = bestOfFive ? 6.4 : 4.35;
+  const over = 1 - normalCdf((line - totalGames) / sd);
+  const gameDiff = homeGames - awayGames;
+  const handicapLine = Math.round(gameDiff * 2) / 2;
+  const homeCover = 1 - normalCdf((handicapLine - gameDiff) / sd);
+  const firstSetTotal = bestOfFive ? 10.2 : 9.8;
+  const periods = [normalPeriod('set1', 'First set', 0, firstSetTotal, 0.001, 3.6, 9.5)];
+  periods[0] = { ...periods[0], home: setProb, draw: 0, away: 1 - setProb };
 
   return {
     home: winProb,
     draw: 0,
     away: 1 - winProb,
-    expected: { ...expected, total: gamesTotal },
+    expected: { home: homeGames, away: awayGames, total: totalGames },
     grid: [],
     btts: 0,
-    over15: 1,
-    over25: 1,
-    over35: 1,
+    over15: 0,
+    over25: 0,
+    over35: 0,
     topScorelines: [],
-    spread: {
-      line: -handicapLine,
-      homeCover: clamp(normalCdf((expected.home - expected.away - handicapLine) / sd), 0.03, 0.97),
-      awayCover: 1 - clamp(normalCdf((expected.home - expected.away - handicapLine) / sd), 0.03, 0.97)
-    },
+    periods,
+    spread: { line: -handicapLine, homeCover, awayCover: 1 - homeCover },
     totalLine: { line, over, under: 1 - over },
     moneyline: { home: winProb, away: 1 - winProb },
-    margin: expected.home - expected.away,
+    margin: gameDiff,
     sd
   };
 }
@@ -324,217 +434,7 @@ function coreFor(fixture: Fixture): CoreModel {
   }
 }
 
-/* ── Market construction ─────────────────────────────────────────────────── */
-
-interface OutcomeSpec {
-  label: string;
-  shortLabel?: string;
-  probability: number;
-  group?: MarketGroup;
-}
-
-let priceScope = '';
-
-function priceOutcome(spec: OutcomeSpec, marketId: string, index: number): MarketOutcome {
-  const p = clamp(spec.probability, 0.0015, 0.996);
-  const key = `${priceScope}-${marketId}-${marketId}-${index}`;
-  const books = BOOKMAKERS.map((book, bi) => {
-    const marginFactor = 1 + book.margin * 0.9;
-    // Each book holds a slightly different opinion. The bias is what creates
-    // genuine best-price edges instead of a uniform overround.
-    const bias = jitter(`${key}-${book.id}-bias`, 0.065);
-    const noise = 1 + jitter(`${key}-${book.id}-${bi}`, 0.012) + bi * 0.0004;
-    const implied = clamp(p * marginFactor * (1 + bias) * noise, 0.001, 0.999);
-    return { book, odds: round(Math.max(1.01, 1 / implied), 2) };
-  });
-  const best = books.reduce((a, b) => (b.odds > a.odds ? b : a));
-  const edge = p * best.odds - 1;
-  return {
-    id: `${marketId}-${index}`,
-    label: spec.label,
-    shortLabel: spec.shortLabel,
-    modelProbability: round(p, 4),
-    fairOdds: fairOdds(p),
-    bookOdds: best.odds,
-    bestBook: best.book.name,
-    edge: round(edge, 4),
-    kelly: round(kellyFraction(p, best.odds), 4),
-    trend: round(jitter(`${marketId}-${spec.label}-trend`, 0.055), 3),
-    confidence: Math.round(clamp(58 + p * 18 + Math.min(20, Math.max(0, edge) * 220), 40, 96)),
-    value: edge > 0.025 && p > 0.08
-  };
-}
-
-function market(id: string, group: MarketGroup, label: string, description: string, specs: OutcomeSpec[]): Market {
-  const outcomes = specs.map((s, i) => priceOutcome(s, id, i));
-  return {
-    id,
-    group,
-    label,
-    description,
-    outcomes,
-    bookmakerCount: BOOKMAKERS.length,
-    updatedAt: new Date().toISOString()
-  };
-}
-
-function buildMarkets(fixture: Fixture, core: CoreModel): Market[] {
-  priceScope = fixture.id;
-  const markets: Market[] = [];
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
-  const hs = home.shortName;
-  const as = away.shortName;
-
-  if (fixture.sport === 'football' || fixture.sport === 'icehockey') {
-    const drawLabel = fixture.sport === 'football' ? 'Draw' : 'Draw (60 min)';
-    markets.push(
-      market('1x2', 'match', 'Match result — 1X2', 'Full-time three-way result', [
-        { label: `${hs} win`, probability: core.home },
-        { label: drawLabel, probability: core.draw },
-        { label: `${as} win`, probability: core.away }
-      ])
-    );
-    markets.push(
-      market('dc', 'match', 'Double chance', 'Two of the three results covered', [
-        { label: `${hs} or draw`, probability: core.home + core.draw },
-        { label: `${hs} or ${as}`, probability: core.home + core.away },
-        { label: `Draw or ${as}`, probability: core.draw + core.away }
-      ])
-    );
-    markets.push(
-      market('dnb', 'match', 'Draw no bet', 'Stake returned on a draw', [
-        { label: hs, probability: core.home / Math.max(0.01, core.home + core.away) },
-        { label: as, probability: core.away / Math.max(0.01, core.home + core.away) }
-      ])
-    );
-  }
-
-  if (fixture.sport === 'football') {
-    markets.push(
-      market('btts', 'totals', 'Both teams to score', 'Both sides find the net', [
-        { label: 'Yes', probability: core.btts },
-        { label: 'No', probability: 1 - core.btts }
-      ]),
-      market('ou15', 'totals', 'Total goals — 1.5', 'Over / under 1.5 goals', [
-        { label: 'Over 1.5', probability: core.over15 },
-        { label: 'Under 1.5', probability: 1 - core.over15 }
-      ]),
-      market('ou25', 'totals', 'Total goals — 2.5', 'Over / under 2.5 goals', [
-        { label: 'Over 2.5', probability: core.over25 },
-        { label: 'Under 2.5', probability: 1 - core.over25 }
-      ]),
-      market('ou35', 'totals', 'Total goals — 3.5', 'Over / under 3.5 goals', [
-        { label: 'Over 3.5', probability: core.over35 },
-        { label: 'Under 3.5', probability: 1 - core.over35 }
-      ])
-    );
-
-    const ahHome = core.grid.reduce((sum, c) => sum + (c.home - c.away > 1 ? c.probability : 0), 0);
-    const ahPush = core.grid.reduce((sum, c) => sum + (c.home - c.away === 1 ? c.probability : 0), 0);
-    const denom = Math.max(0.01, 1 - ahPush);
-    markets.push(
-      market('ah', 'handicap', `Asian handicap ${hs} −1`, 'Home side starts one goal behind', [
-        { label: `${hs} −1`, probability: ahHome / denom },
-        { label: `${as} +1`, probability: 1 - ahHome / denom }
-      ]),
-      market('cs', 'score', 'Correct score', 'Top projected scorelines', [
-        ...core.topScorelines.slice(0, 5).map((c) => ({
-          label: `${c.home}–${c.away}`,
-          probability: c.probability
-        })),
-        {
-          label: 'Any other',
-          probability: Math.max(0.01, 1 - core.topScorelines.slice(0, 5).reduce((a, c) => a + c.probability, 0))
-        }
-      ])
-    );
-  }
-
-  if (fixture.sport === 'basketball') {
-    markets.push(
-      market('ml', 'match', 'Moneyline', 'Outright winner including overtime', [
-        { label: hs, probability: core.home },
-        { label: as, probability: core.away }
-      ]),
-      market('spread', 'handicap', `Points spread ${core.spread?.line ?? 0}`, 'Handicap inclusive of overtime', [
-        { label: `${hs} ${(core.spread?.line ?? 0) > 0 ? '+' : ''}${core.spread?.line ?? 0}`, probability: core.spread?.homeCover ?? 0.5 },
-        { label: `${as} ${(core.spread?.line ?? 0) < 0 ? '+' : '−'}${Math.abs(core.spread?.line ?? 0)}`, probability: core.spread?.awayCover ?? 0.5 }
-      ]),
-      market('total', 'totals', `Total points ${core.totalLine?.line ?? 0}`, 'Combined points over / under', [
-        { label: `Over ${core.totalLine?.line ?? 0}`, probability: core.totalLine?.over ?? 0.5 },
-        { label: `Under ${core.totalLine?.line ?? 0}`, probability: core.totalLine?.under ?? 0.5 }
-      ]),
-      market('teamtotal', 'totals', `${hs} team total`, 'Home team points over / under', [
-        { label: `Over ${Math.round((core.expected.home - 2) * 2) / 2}`, probability: 0.52 },
-        { label: `Under ${Math.round((core.expected.home - 2) * 2) / 2}`, probability: 0.48 }
-      ])
-    );
-  }
-
-  if (fixture.sport === 'tennis') {
-    const bestOfFive = fixture.leagueId === 'grandslam';
-    const p = core.home;
-    const straight = bestOfFive ? p * p * p : p * p;
-    const deciding = bestOfFive ? 3 * p * p * (1 - p) : 2 * p * (1 - p);
-    markets.push(
-      market('ml', 'match', 'Match winner', 'Best-of-three match result', [
-        { label: home.shortName, probability: p },
-        { label: away.shortName, probability: 1 - p }
-      ]),
-      market('sets', 'sets', 'Set betting', 'Correct set score', [
-        { label: bestOfFive ? '3–0' : '2–0', probability: straight },
-        { label: bestOfFive ? '3–1' : '2–1', probability: deciding * 0.6 },
-        { label: bestOfFive ? '1–3' : '1–2', probability: (1 - p) * (1 - p) * 2 * p * 0.5 },
-        { label: bestOfFive ? '0–3' : '0–2', probability: (1 - p) * (1 - p) }
-      ]),
-      market('games', 'totals', `Total games ${core.totalLine?.line ?? 22.5}`, 'Games in the match', [
-        { label: `Over ${core.totalLine?.line ?? 22.5}`, probability: core.totalLine?.over ?? 0.5 },
-        { label: `Under ${core.totalLine?.line ?? 22.5}`, probability: core.totalLine?.under ?? 0.5 }
-      ]),
-      market('gamehcp', 'handicap', `Game handicap ${hs}`, 'Handicap on total games won', [
-        { label: `${hs} ${core.spread?.line ?? 0}`, probability: core.spread?.homeCover ?? 0.5 },
-        { label: `${as} +${Math.abs(core.spread?.line ?? 0)}`, probability: core.spread?.awayCover ?? 0.5 }
-      ])
-    );
-  }
-
-  if (fixture.sport === 'icehockey') {
-    markets.push(
-      market('ml', 'match', 'Moneyline (incl. OT)', 'Winner including overtime and shootout', [
-        { label: hs, probability: core.moneyline?.home ?? core.home },
-        { label: as, probability: core.moneyline?.away ?? core.away }
-      ]),
-      market('puck', 'handicap', 'Puck line ±1.5', 'Three-way result with a 1.5 goal handicap', [
-        { label: `${hs} −1.5`, probability: core.spread?.homeCover ?? 0.5 },
-        { label: `${as} +1.5`, probability: core.spread?.awayCover ?? 0.5 }
-      ]),
-      market('total', 'totals', `Total goals ${core.totalLine?.line ?? 5.5}`, 'Combined goals over / under', [
-        { label: `Over ${core.totalLine?.line ?? 5.5}`, probability: core.totalLine?.over ?? 0.5 },
-        { label: `Under ${core.totalLine?.line ?? 5.5}`, probability: core.totalLine?.under ?? 0.5 }
-      ])
-    );
-  }
-
-  if (fixture.sport === 'baseball') {
-    markets.push(
-      market('ml', 'match', 'Moneyline', 'Outright winner including extra innings', [
-        { label: hs, probability: core.home },
-        { label: as, probability: core.away }
-      ]),
-      market('runline', 'handicap', 'Run line −1.5', 'Home side must win by two or more', [
-        { label: `${hs} −1.5`, probability: core.spread?.homeCover ?? 0.5 },
-        { label: `${as} +1.5`, probability: core.spread?.awayCover ?? 0.5 }
-      ]),
-      market('total', 'totals', `Total runs ${core.totalLine?.line ?? 8.5}`, 'Combined runs over / under', [
-        { label: `Over ${core.totalLine?.line ?? 8.5}`, probability: core.totalLine?.over ?? 0.5 },
-        { label: `Under ${core.totalLine?.line ?? 8.5}`, probability: core.totalLine?.under ?? 0.5 }
-      ])
-    );
-  }
-
-  return markets;
-}
+/* ── Market construction (sport-specific) ───────────────────────────────── */
 
 /* ── Model components ────────────────────────────────────────────────────── */
 
@@ -757,6 +657,8 @@ function buildValueBets(markets: Market[], bankroll = PAPER_BANKROLL_NGN): Value
       m.outcomes.map((o) => ({
         market: m.label,
         marketId: m.id,
+        marketGroup: m.group,
+        outcomeId: o.id,
         selection: o.label,
         odds: o.bookOdds,
         modelProbability: o.modelProbability,
@@ -784,6 +686,8 @@ function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: 
     return {
       selection: best.selection,
       market: best.market,
+      marketId: best.marketId,
+      outcomeId: best.outcomeId,
       odds: best.odds,
       modelProbability: best.modelProbability,
       stakeNgn: best.stakeNgn,
@@ -797,6 +701,8 @@ function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: 
   return {
     selection: fallback?.label ?? `${home.shortName} win`,
     market: core?.label ?? 'Match result',
+    marketId: core?.id,
+    outcomeId: fallback?.id,
     odds: fallback?.bookOdds ?? 2,
     modelProbability: fallback?.modelProbability ?? 0.5,
     stakeNgn: 5000,
@@ -804,6 +710,59 @@ function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: 
     rationale: 'No selection clears the value threshold. This is the model’s most likely outcome — treated as a no-bet or minimum-stake watchlist item.',
     risk: 'medium'
   };
+}
+
+function buildMetrics(fixture: Fixture, core: CoreModel): AnalysisMetric[] {
+  const home = TEAM_MAP[fixture.homeId];
+  const away = TEAM_MAP[fixture.awayId];
+  const seed = fixture.id;
+  const stat = (n: number, spread: number) => round(n + jitter(seed + n, spread), 1);
+  if (fixture.sport === 'football') {
+    const possession = fixture.stats?.possession ?? [55, 45];
+    return [
+      { id: 'xg', label: 'Expected goals', value: core.expected.home + core.expected.away, display: `${core.expected.home.toFixed(2)} – ${core.expected.away.toFixed(2)}`, hint: `${home.shortName} vs ${away.shortName} projected goals`, tone: 'neutral' },
+      { id: 'shots', label: 'Shots', value: (fixture.stats?.shots?.[0] ?? 13) + (fixture.stats?.shots?.[1] ?? 10), display: `${fixture.stats?.shots?.[0] ?? 13} – ${fixture.stats?.shots?.[1] ?? 10}`, hint: 'Total attempts and on-target split', tone: 'neutral' },
+      { id: 'possession', label: 'Possession', value: possession[0], display: `${possession[0]}% – ${possession[1]}%`, hint: 'Share of the ball', tone: 'neutral' },
+      { id: 'btts', label: 'BTTS', value: core.btts, display: `${(core.btts * 100).toFixed(1)}%`, hint: 'Both teams to score', tone: core.btts > 0.55 ? 'positive' : 'neutral' },
+      { id: 'goals', label: 'Goal environment', value: core.expected.total, display: `${core.expected.total.toFixed(2)} goals`, hint: 'Projected combined goals', tone: 'neutral' }
+    ];
+  }
+  if (fixture.sport === 'basketball') {
+    const pace = stat(98, 3);
+    return [
+      { id: 'points', label: 'Projected points', value: core.expected.total, display: `${core.expected.home.toFixed(0)} – ${core.expected.away.toFixed(0)}`, hint: 'Full-game points including overtime', tone: 'neutral' },
+      { id: 'pace', label: 'Pace', value: pace, display: `${pace.toFixed(1)} poss/48`, hint: 'Possessions per 48 minutes', tone: 'neutral' },
+      { id: 'spread', label: 'Spread', value: core.spread?.line ?? 0, display: `${(core.spread?.line ?? 0) > 0 ? '+' : ''}${core.spread?.line ?? 0}`, hint: 'Model point margin at the line', tone: 'neutral' },
+      { id: 'total', label: 'Total', value: core.totalLine?.line ?? 0, display: `${core.totalLine?.line ?? 0} points`, hint: 'Combined points line', tone: 'neutral' },
+      { id: 'rating', label: 'Offensive rating', value: 116, display: `${stat(116, 2).toFixed(1)} ORtg`, hint: 'Points per 100 possessions', tone: 'positive' }
+    ];
+  }
+  if (fixture.sport === 'icehockey') {
+    const shots = stat(31, 4);
+    return [
+      { id: 'xg', label: 'Expected goals', value: core.expected.total, display: `${core.expected.home.toFixed(2)} – ${core.expected.away.toFixed(2)}`, hint: 'Shot-quality weighted goals', tone: 'neutral' },
+      { id: 'shots', label: 'Shots', value: shots, display: `${shots.toFixed(0)} total`, hint: 'Shot volume at 5v5 and special teams', tone: 'neutral' },
+      { id: 'save', label: 'Goalie save %', value: 91.2, display: `${stat(91.2, 1.2).toFixed(1)}%`, hint: 'Starter-adjusted save percentage', tone: 'neutral' },
+      { id: 'pp', label: 'Power play', value: 22.4, display: `${stat(22.4, 2).toFixed(1)}%`, hint: 'Conversion and chances', tone: 'neutral' },
+      { id: 'total', label: 'Goal environment', value: core.expected.total, display: `${core.expected.total.toFixed(1)} goals`, hint: 'Projected regulation goals', tone: 'neutral' }
+    ];
+  }
+  if (fixture.sport === 'baseball') {
+    return [
+      { id: 'runs', label: 'Projected runs', value: core.expected.total, display: `${core.expected.home.toFixed(1)} – ${core.expected.away.toFixed(1)}`, hint: 'Full-game run expectancy', tone: 'neutral' },
+      { id: 'starter', label: 'Starter', value: 3.52, display: `${stat(3.52, 0.35).toFixed(2)} xFIP`, hint: 'Starting pitcher run prevention', tone: 'neutral' },
+      { id: 'bullpen', label: 'Bullpen', value: 3.88, display: `${stat(3.88, 0.4).toFixed(2)} ERA`, hint: 'Relief run prevention', tone: 'neutral' },
+      { id: 'park', label: 'Park factor', value: 1.02, display: `${stat(1.02, 0.06).toFixed(2)}×`, hint: 'Run environment at the venue', tone: 'neutral' },
+      { id: 'total', label: 'Run environment', value: core.totalLine?.line ?? 8.5, display: `${core.totalLine?.line ?? 8.5} runs`, hint: 'Combined runs line', tone: 'neutral' }
+    ];
+  }
+  return [
+    { id: 'hold', label: 'Hold %', value: 82.4, display: `${stat(82.4, 3).toFixed(1)}%`, hint: 'Service games held', tone: 'positive' },
+    { id: 'break', label: 'Break %', value: 27.6, display: `${stat(27.6, 3).toFixed(1)}%`, hint: 'Return games won', tone: 'neutral' },
+    { id: 'serve', label: 'First-serve points', value: 71.8, display: `${stat(71.8, 2.5).toFixed(1)}%`, hint: 'Points won behind first serve', tone: 'neutral' },
+    { id: 'sets', label: 'Set spread', value: core.home - core.away, display: `${(core.home - core.away > 0 ? '+' : '')}${(core.home - core.away).toFixed(2)}`, hint: 'Projected set margin', tone: 'neutral' },
+    { id: 'games', label: 'Total games', value: core.expected.total, display: `${core.expected.total.toFixed(1)} games`, hint: 'Projected games in the match', tone: 'neutral' }
+  ];
 }
 
 /* ── Public API ──────────────────────────────────────────────────────────── */
@@ -821,9 +780,16 @@ export function buildPrediction(fixture: Fixture): Prediction {
   const valueBets = buildValueBets(markets);
   const recommendation = buildRecommendation(valueBets, markets, fixture);
   const insights = buildInsights(fixture, core, markets, confidence);
+  const profile = sportProfile(fixture.sport);
 
   return {
     fixtureId: fixture.id,
+    sport: fixture.sport,
+    scoreUnit: profile.scoreUnitPlural,
+    marketContext: profile.backtest.settlement,
+    modelLabel: profile.backtest.model,
+    settlement: profile.backtest.settlement,
+    metrics: buildMetrics(fixture, core),
     generatedAt: new Date().toISOString(),
     modelVersion: 'CaveBettor Ensemble v7.3',
     ensembleVersion: '2026.02.1',
