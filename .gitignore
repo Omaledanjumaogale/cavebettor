@@ -1,0 +1,15 @@
+node_modules/
+.svelte-kit/
+build/
+.vercel/
+.wrangler/
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+convex/_generated/
+*.log
+
+# local research artifacts (third-party README snapshots)
+research/

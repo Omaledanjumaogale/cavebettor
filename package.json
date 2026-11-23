@@ -1,0 +1,44 @@
+{
+  "name": "cavebettor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CaveBettor — harmonised sports prediction, odds intelligence and bankroll analytics workspace.",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "convex:dev": "convex dev",
+    "convex:deploy": "convex deploy",
+    "seed": "node scripts/seed.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workerd-windows-64": "^1.20261122.2",
+    "@sveltejs/adapter-cloudflare": "^7.2.10",
+    "@sveltejs/kit": "latest",
+    "@sveltejs/vite-plugin-svelte": "latest",
+    "@tailwindcss/vite": "latest",
+    "svelte": "latest",
+    "svelte-check": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "latest",
+    "@fontsource-variable/space-grotesk": "latest",
+    "@lucide/svelte": "^1.77.0",
+    "cheerio": "^1.2.0",
+    "clsx": "latest",
+    "convex": "latest",
+    "convex-svelte": "latest",
+    "date-fns": "latest",
+    "zod": "latest"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  }
+}
