@@ -118,7 +118,8 @@ function footballCore(fixture: Fixture): CoreModel {
   const lambdaA = clamp(expected.away * remaining, 0.05, 4.2);
   const grid = poissonGrid(lambdaH, lambdaA, rho);
 
-  const summary = summarizeGrid(grid);
+  // In-play probabilities must include the goals already on the board.
+  const summary = summarizeGrid(grid, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
   if (live) {
     // Re-anchor expectations for display at full-match level.
     const total = (fixture.score.home + fixture.score.away) / Math.max(0.08, progress);
@@ -151,17 +152,23 @@ function hockeyCore(fixture: Fixture): CoreModel {
   const live = fixture.status === 'live';
   const progress = live ? clamp((fixture.minute ?? 30) / 90, 0, 1) : 0;
   const remaining = live ? clamp(1 - progress, 0.05, 1) : 1;
-  const grid = poissonGrid(expected.home * remaining, expected.away * remaining, rho);
-  const summary = summarizeGrid(grid);
+  const lambdaH = expected.home * remaining;
+  const lambdaA = expected.away * remaining;
+  const grid = poissonGrid(lambdaH, lambdaA, rho);
+  const summary = summarizeGrid(grid, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
   const homeMl = clamp(summary.home + summary.draw * 0.54, 0.02, 0.96);
   const awayMl = clamp(summary.away + summary.draw * 0.46, 0.02, 0.96);
-  const total = expected.home + expected.away;
-  const margin = expected.home - expected.away;
+  const total = live
+    ? fixture.score.home + fixture.score.away + lambdaH + lambdaA
+    : expected.home + expected.away;
+  const margin = live
+    ? fixture.score.home - fixture.score.away + lambdaH - lambdaA
+    : expected.home - expected.away;
   return {
     ...summary,
-    home: homeMl,
-    away: awayMl,
-    draw: 0,
+    home: summary.home,
+    away: summary.away,
+    draw: summary.draw,
     expected: { ...expected, total },
     moneyline: { home: homeMl, away: awayMl },
     spread: { line: -1.5, homeCover: clamp(normalCdf((margin - 1.5) / 2.3), 0.03, 0.97), awayCover: 1 - clamp(normalCdf((margin - 1.5) / 2.3), 0.03, 0.97) },
@@ -176,10 +183,15 @@ function basketballCore(fixture: Fixture): CoreModel {
   const away = TEAM_MAP[fixture.awayId];
   const expected = expectedScore('basketball', home, away, 1);
   const seed = fixture.id;
+  const live = fixture.status === 'live';
+  const progress = live ? clamp((fixture.minute ?? 72) / 150, 0, 1) : 0;
+  const remaining = live ? clamp(1 - progress, 0.04, 1) : 1;
+  const finalHome = live ? fixture.score.home + expected.home * remaining : expected.home;
+  const finalAway = live ? fixture.score.away + expected.away * remaining : expected.away;
   const sdMargin = home.leagueId === 'nba' ? 12.6 : home.leagueId === 'euroleague' ? 9.8 : 8.9;
   const sdTotal = home.leagueId === 'nba' ? 19.4 : 14.6;
-  const margin = expected.home - expected.away + jitter(seed + 'm', 0.6);
-  const total = expected.home + expected.away;
+  const margin = finalHome - finalAway + jitter(seed + 'm', 0.6);
+  const total = finalHome + finalAway;
   const homeProb = clamp(normalCdf(margin / sdMargin), 0.03, 0.97);
   const line = Math.round(margin * 2) / 2;
   const totalLine = Math.round(total * 2) / 2;
@@ -187,12 +199,12 @@ function basketballCore(fixture: Fixture): CoreModel {
   const over = clamp(1 - normalCdf((totalLine - total) / sdTotal), 0.02, 0.98);
 
   // Approximate scoreline cloud around the modal score.
-  const iH = Math.round(expected.home);
-  const iA = Math.round(expected.away);
+  const iH = Math.round(finalHome);
+  const iA = Math.round(finalAway);
   const cells: ScoreCell[] = [];
   for (let dh = -9; dh <= 9; dh += 2) {
     for (let da = -9; da <= 9; da += 2) {
-      const p = normalPdf(iH + dh, expected.home, 11) * normalPdf(iA + da, expected.away, 11);
+      const p = normalPdf(iH + dh, finalHome, 11) * normalPdf(iA + da, finalAway, 11);
       cells.push({ home: iH + dh, away: iA + da, probability: p, total: p });
     }
   }
@@ -224,15 +236,20 @@ function baseballCore(fixture: Fixture): CoreModel {
   const away = TEAM_MAP[fixture.awayId];
   const expected = expectedScore('baseball', home, away, 1.03);
   const sd = 2.7;
+  const live = fixture.status === 'live';
+  const progress = live ? clamp((fixture.minute ?? 95) / 190, 0, 1) : 0;
+  const remaining = live ? clamp(1 - progress, 0.04, 1) : 1;
+  const lambdaH = expected.home * remaining;
+  const lambdaA = expected.away * remaining;
   const grid: number[][] = Array.from({ length: 16 }, () => Array(16).fill(0));
-  for (let h = 0; h < 16; h++) for (let a = 0; a < 16; a++) grid[h][a] = poissonPmf(expected.home, h) * poissonPmf(expected.away, a);
+  for (let h = 0; h < 16; h++) for (let a = 0; a < 16; a++) grid[h][a] = poissonPmf(lambdaH, h) * poissonPmf(lambdaA, a);
   const normalized = normalizeGrid(grid);
   let homeWin = 0;
   for (let h = 0; h < 16; h++) for (let a = 0; a < 16; a++) if (h > a) homeWin += normalized[h][a];
   homeWin = clamp(homeWin + (1 - homeWin) * 0.52, 0.03, 0.97);
-  const summary = summarizeGrid(normalized);
-  const total = expected.home + expected.away;
-  const margin = expected.home - expected.away;
+  const summary = summarizeGrid(normalized, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
+  const total = live ? fixture.score.home + fixture.score.away + lambdaH + lambdaA : expected.home + expected.away;
+  const margin = live ? fixture.score.home - fixture.score.away + lambdaH - lambdaA : expected.home - expected.away;
   return {
     ...summary,
     home: homeWin,

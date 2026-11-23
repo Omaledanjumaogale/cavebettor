@@ -5,8 +5,9 @@
   import SectionHeader from '#lib/components/SectionHeader.svelte';
   import { fmtNgn } from '#lib/engine/core';
   import { relativeTime, formatDate } from '#lib/format';
+  import type { ActionData } from './$types';
 
-  let { data } = $props();
+  let { data, form }: { data: any; form: ActionData } = $props();
   let tab = $state<'overview' | 'users' | 'audit' | 'flags'>('overview');
   let query = $state('');
   let flags = $state({ liveOdds: true, llmAnalyst: true, scraperLiveMode: false, arbitrageScan: true, newPricing: false, publicApi: true });
@@ -24,8 +25,16 @@
       <h1 class="display text-[26px] font-bold tracking-tight text-white">Operate the platform.</h1>
       <p class="mt-1 text-[12.5px] text-fog">Subscription revenue, users, model promotions, data health and feature flags. Owner access only.</p>
     </div>
-    <span class="chip chip-rose"><AlertTriangle size={10} /> Restricted area</span>
+    <div class="flex items-center gap-2">
+      <span class={`chip !text-[9px] ${data.live ? 'chip-mint' : 'chip-amber'}`}><Database size={10} /> {data.live ? 'Convex live' : 'Local fallback'}</span>
+      <form method="POST" action="?/sync"><button class="btn !py-2 text-[11px]" type="submit"><Cpu size={12} /> Sync live data</button></form>
+      <span class="chip chip-rose"><AlertTriangle size={10} /> Restricted area</span>
+    </div>
   </div>
+
+  {#if form?.message}
+    <div role="status" class={`rounded-xl border p-3 text-[11.5px] ${form.ok ? 'border-mint/30 bg-mint/10 text-mint' : 'border-rose/30 bg-rose/10 text-rose'}`}>{form.message}</div>
+  {/if}
 
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
     {#each [
@@ -42,6 +51,26 @@
         <div class="mt-0.5 text-[10px] text-fog-dim">{kpi.sub}</div>
       </div>
     {/each}
+  </div>
+
+  <div class="panel p-4">
+    <SectionHeader title="Integrations" description="Register these exact callback URLs in each provider console. Secrets stay server-side." eyebrow="Production wiring" />
+    <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+      {#each data.integrations as integration}
+        <div class="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="text-[12px] font-semibold text-white">{integration.label}</div>
+              <div class="mt-0.5 text-[10px] text-fog-dim">{integration.detail}</div>
+            </div>
+            <span class={`chip !text-[9px] ${integration.status === 'Live' || integration.status === 'Configured' ? 'chip-mint' : 'chip-amber'}`}>{integration.status}</span>
+          </div>
+          {#if integration.callback}
+            <code class="mt-2 block overflow-x-auto whitespace-nowrap rounded-lg bg-black/30 px-2 py-1.5 text-[10px] text-lime">{integration.callback}</code>
+          {/if}
+        </div>
+      {/each}
+    </div>
   </div>
 
   <div class="scrollbar-none flex gap-1 overflow-x-auto border-b border-white/[0.07] pb-px">

@@ -3,13 +3,15 @@ import { getFixtures } from '#lib/engine/fixtures';
 import { getPrediction } from '#lib/engine/predictions';
 import { arbitrage, bookPrices } from '#lib/engine/books';
 import { getOddsMovers } from '#lib/engine/analytics';
+import { liveCards, liveFixtures, livePrediction } from '#lib/server/live';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ url }) => {
-  const upcoming = getFixtures().filter((f) => f.status !== 'finished');
+export const load: PageServerLoad = async ({ url }) => {
+  const [live, cards] = await Promise.all([liveFixtures(), liveCards()]);
+  const upcoming = (live ?? getFixtures()).filter((f) => f.status !== 'finished');
   const selectedId = url.searchParams.get('id') ?? upcoming[0]?.id;
   const fixture = upcoming.find((f) => f.id === selectedId) ?? upcoming[0];
-  const prediction = getPrediction(fixture);
+  const prediction = (await livePrediction(fixture.id)) ?? getPrediction(fixture);
   const league = LEAGUE_MAP[fixture.leagueId];
 
   const matrices = prediction.markets.map((market) => ({
@@ -34,20 +36,31 @@ export const load: PageServerLoad = ({ url }) => {
 
   const arbs = upcoming
     .map((f) => {
-      const p = getPrediction(f);
-      const main = p.markets.find((m) => m.id === '1x2' || m.id === 'ml');
-      if (!main) return null;
-      const result = arbitrage(main.outcomes.map((o) => o.modelProbability), `${f.id}-arb`);
+      const card = cards?.[f.id];
+      const home = TEAM_MAP[f.homeId];
+      const away = TEAM_MAP[f.awayId];
+      const probabilities = card
+        ? card.probabilities.draw > 0.005
+          ? [card.probabilities.home, card.probabilities.draw, card.probabilities.away]
+          : [card.probabilities.home, card.probabilities.away]
+        : (() => {
+            const p = getPrediction(f);
+            const main = p.markets.find((m) => m.id === '1x2' || m.id === 'ml');
+            return main ? main.outcomes.map((o) => o.modelProbability) : [];
+          })();
+      if (probabilities.length < 2) return null;
+      const labels = probabilities.length === 3 ? [`${home.shortName} win`, 'Draw', `${away.shortName} win`] : [home.shortName, away.shortName];
+      const result = arbitrage(probabilities, `${f.id}-arb`);
       return {
         fixtureId: f.id,
         kickoff: f.kickoff,
         league: LEAGUE_MAP[f.leagueId].shortName,
-        home: TEAM_MAP[f.homeId].shortName,
-        away: TEAM_MAP[f.awayId].shortName,
-        market: main.label,
+        home: home.shortName,
+        away: away.shortName,
+        market: probabilities.length === 3 ? 'Match result — 1X2' : 'Moneyline',
         margin: result.margin,
         totalImplied: result.totalImplied,
-        outcomes: result.outcomes.map((o, i) => ({ label: main.outcomes[i].label, odds: o.odds, book: o.name, implied: o.implied }))
+        outcomes: result.outcomes.map((o, i) => ({ label: labels[i], odds: o.odds, book: o.name, implied: o.implied }))
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)

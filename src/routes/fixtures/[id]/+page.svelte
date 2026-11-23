@@ -23,13 +23,13 @@
   let analysisLoading = $state(false);
   let marketFilter = $state('all');
 
-  const tabs = [
+  const tabs = $derived([
     { id: 'analysis', label: 'Analysis', icon: Sparkles },
     { id: 'markets', label: `Markets (${prediction.markets.length})`, icon: Layers },
     { id: 'stats', label: 'Stats & form', icon: BarChart3 },
     { id: 'lineups', label: 'Lineups', icon: Users },
     { id: 'models', label: 'Models', icon: GitCompareArrows }
-  ] as const;
+  ] as const);
 
   const main = $derived(prediction.markets.find((m: any) => m.id === '1x2' || m.id === 'ml'));
   const bestEdge = $derived([...prediction.markets.flatMap((m: any) => m.outcomes.map((o: any) => ({ ...o, market: m.label })))].sort((a: any, b: any) => b.edge - a.edge));

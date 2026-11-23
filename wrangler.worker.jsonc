@@ -1,0 +1,23 @@
+{
+  "name": "cavebettor-app",
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "CAVEBETTOR_MONTHLY_NGN": "5000",
+    "PUBLIC_CONVEX_URL": "https://expert-goose-697.eu-west-1.convex.cloud",
+    "PUBLIC_CONVEX_SITE_URL": "https://expert-goose-697.eu-west-1.convex.site",
+    "PUBLIC_SITE_URL": "https://cavebettor.ewinproject.org",
+    "PUBLIC_DEMO_MODE": "false",
+    "EWIN_SITE_URL": "https://ewinproject.org"
+  },
+  "assets": {
+    "directory": ".svelte-kit/cloudflare",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": true
+  },
+  "routes": [
+    { "pattern": "cavebettor.ewinproject.org", "custom_domain": true }
+  ]
+}

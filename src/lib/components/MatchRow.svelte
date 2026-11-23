@@ -1,10 +1,11 @@
 <script lang="ts">
   import { LEAGUE_MAP, TEAM_MAP } from '#lib/data/catalog';
-  import type { Fixture, Prediction } from '#lib/types';
+  import type { Fixture } from '#lib/types';
+  import type { PredictionCard } from '#lib/snapshot';
   import { formatKickoff } from '#lib/format';
   import TeamBadge from './TeamBadge.svelte';
 
-  let { fixture, prediction }: { fixture: Fixture; prediction: Prediction } = $props();
+  let { fixture, prediction }: { fixture: Fixture; prediction: PredictionCard } = $props();
   const league = $derived(LEAGUE_MAP[fixture.leagueId]);
   const home = $derived(TEAM_MAP[fixture.homeId]);
   const away = $derived(TEAM_MAP[fixture.awayId]);

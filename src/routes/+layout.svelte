@@ -10,7 +10,7 @@
 {#if bare}
   {@render children()}
 {:else}
-  <AppShell liveCount={data.counts.live} valueCount={data.counts.value} fixturesCount={data.counts.fixtures}>
+  <AppShell liveCount={data.counts.live} valueCount={data.counts.value} fixturesCount={data.counts.fixtures} user={data.user}>
     {@render children()}
   </AppShell>
 {/if}

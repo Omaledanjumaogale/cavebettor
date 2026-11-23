@@ -89,7 +89,7 @@ function daysFromNow(days: number) {
   return Date.now() + days * 86_400_000;
 }
 
-export const seedDemo = mutation({
+export const seedDemo = internalMutation({
   args: { reset: v.optional(v.boolean()) },
   handler: async (ctx, { reset }) => {
     if (reset) {

@@ -1,11 +1,13 @@
 import { getAnalytics, getBankroll, getMetrics, getPaperBets } from '#lib/engine/analytics';
+import { readSnapshot } from '#lib/server/live';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = () => {
-  const analytics = getAnalytics();
-  const curve = getBankroll();
-  const metrics = getMetrics();
-  const bets = getPaperBets();
+export const load: PageServerLoad = async () => {
+  const snapshot: any = await readSnapshot('analytics');
+  const analytics: any = snapshot?.analytics ?? getAnalytics();
+  const curve: any[] = snapshot?.curve ?? getBankroll();
+  const metrics: any = snapshot?.metrics ?? getMetrics();
+  const bets: any[] = snapshot?.bets ?? getPaperBets();
 
   const drawdown: number[] = [];
   let peak = curve[0]?.bankrollNgn ?? 0;

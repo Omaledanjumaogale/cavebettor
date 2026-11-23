@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { CalendarDays, Search, LayoutGrid, List, SlidersHorizontal, ChevronRight, Radio, Sparkles, CircleX } from '@lucide/svelte';
   import FixtureCard from '#lib/components/FixtureCard.svelte';
@@ -7,7 +8,7 @@
   import { formatDate } from '#lib/format';
 
   let { data } = $props();
-  let search = $state(data.filters.q);
+  let search = $state(untrack(() => data.filters.q));
 
   const statuses = [
     { id: 'all', label: 'All fixtures' },

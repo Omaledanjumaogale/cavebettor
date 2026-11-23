@@ -1,58 +1,77 @@
-import { getAnalytics, getDashboard, getDailyBrief, getOddsMovers, getTopValueBets } from '#lib/engine/analytics';
+import { getAnalytics, getDailyBrief, getDashboard } from '#lib/engine/analytics';
 import { LEAGUES, MODELS, DATA_SOURCES, TEAM_MAP, LEAGUE_MAP } from '#lib/data/catalog';
+import { readSnapshot } from '#lib/server/live';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = () => {
+interface DashboardSnapshot {
+  counts: ReturnType<typeof getDashboard>['counts'];
+  metrics: ReturnType<typeof getDashboard>['metrics'];
+  curve: ReturnType<typeof getDashboard>['curve'];
+  live: { fixture: any; prediction: any }[];
+  upcoming: { fixture: any; prediction: any }[];
+  valueBets: any[];
+  brief: any;
+  movers: any[];
+}
+
+export const load: PageServerLoad = async () => {
+  const snap = await readSnapshot<DashboardSnapshot>('dashboard');
   const dashboard = getDashboard();
   const analytics = getAnalytics();
-  const brief = getDailyBrief();
-  const movers = getOddsMovers();
+
+  const counts = snap?.counts ?? dashboard.counts;
+  const metrics = snap?.metrics ?? dashboard.metrics;
+  const curve = snap?.curve ?? dashboard.curve.filter((_, i) => i % 2 === 0);
+  const live = snap?.live ?? dashboard.live.slice(0, 6).map((f) => ({
+    fixture: f,
+    prediction: dashboard.predictions.find((p) => p.fixture.id === f.id)!.prediction
+  }));
+  const upcoming = snap?.upcoming ?? dashboard.upcoming.slice(0, 8).map((f) => ({
+    fixture: f,
+    prediction: dashboard.predictions.find((p) => p.fixture.id === f.id)!.prediction
+  }));
+  const valueBets = (snap?.valueBets ?? []).length
+    ? snap!.valueBets
+    : dashboard.valueBets.map((v) => ({
+        ...v,
+        fixture: v.fixture,
+        fixtureLabel: `${TEAM_MAP[v.fixture.homeId]?.name} vs ${TEAM_MAP[v.fixture.awayId]?.name}`,
+        leagueLabel: LEAGUE_MAP[v.fixture.leagueId]?.shortName,
+        sport: v.fixture.sport
+      }));
 
   return {
-    counts: dashboard.counts,
-    metrics: dashboard.metrics,
-    curve: dashboard.curve.filter((_, i) => i % 2 === 0),
-    live: dashboard.live.slice(0, 6).map((f) => ({
-      fixture: f,
-      prediction: dashboard.predictions.find((p) => p.fixture.id === f.id)!.prediction
-    })),
-    upcoming: dashboard.upcoming.slice(0, 8).map((f) => ({
-      fixture: f,
-      prediction: dashboard.predictions.find((p) => p.fixture.id === f.id)!.prediction
-    })),
-    valueBets: getTopValueBets(6).map((v) => ({
+    counts,
+    metrics,
+    curve,
+    live,
+    upcoming,
+    valueBets: valueBets.map((v: any) => ({
       ...v,
       fixture: null,
-      fixtureLabel: `${TEAM_MAP[v.fixture.homeId]?.name} vs ${TEAM_MAP[v.fixture.awayId]?.name}`,
-      fixtureId: v.fixture.id,
-      leagueLabel: LEAGUE_MAP[v.fixture.leagueId]?.shortName,
-      sport: v.fixture.sport
+      fixtureId: v.fixture?.id ?? v.fixtureId,
+      fixtureLabel: v.fixtureLabel ?? `${TEAM_MAP[v.fixture?.homeId]?.name} vs ${TEAM_MAP[v.fixture?.awayId]?.name}`,
+      leagueLabel: v.leagueLabel ?? LEAGUE_MAP[v.fixture?.leagueId]?.shortName,
+      sport: v.sport ?? v.fixture?.sport
     })),
-    brief: {
-      ...brief,
-      live: undefined,
-      upcoming: undefined,
-      value: undefined
-    },
-    movers: movers.map((m) => ({
-      fixtureId: m.fixture.id,
-      kickoff: m.fixture.kickoff,
-      status: m.fixture.status,
-      leagueId: m.fixture.leagueId,
-      homeId: m.fixture.homeId,
-      awayId: m.fixture.awayId,
-      selection: m.selection,
-      odds: m.odds,
-      drift: m.drift,
-      edge: m.edge
-    })),
+    brief: snap?.brief ?? (() => {
+      const brief = getDailyBrief();
+      return {
+        generatedAt: brief.generatedAt,
+        headline: brief.headline,
+        body: brief.body,
+        analysis: `Best-price shopping is doing the work today: ${brief.value.length} headline signals sit above fair on average. Model disagreement is widest in the live totals, where line movement has been sharper than the pre-match close. Treat the paper desk as the risk reference before committing size.`,
+        watchlist: brief.watchlist
+      };
+    })(),
+    movers: snap?.movers ?? [],
     roiBySport: analytics.roiBySport,
     roiByMarket: analytics.roiByMarket,
     monthly: analytics.monthly,
     leagues: LEAGUES.map((l) => ({
       ...l,
-      tracked: dashboard.counts.leagues > 0,
-      fixtures: dashboard.upcoming.filter((f) => f.leagueId === l.id).length + dashboard.live.filter((f) => f.leagueId === l.id).length
+      tracked: counts.leagues > 0,
+      fixtures: [...(snap?.upcoming ?? []), ...(snap?.live ?? [])].filter((f: any) => f.fixture?.leagueId === l.id).length
     })),
     models: MODELS.slice(0, 4).map((m) => ({
       id: m.id,

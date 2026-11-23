@@ -2,21 +2,25 @@ import { LEAGUE_MAP, SPORTS, TEAM_MAP } from '#lib/data/catalog';
 import { getFixtures } from '#lib/engine/fixtures';
 import { getPrediction } from '#lib/engine/predictions';
 import { round } from '#lib/engine/core';
+import { cardOf } from '#lib/snapshot';
+import { liveCards, liveFixtures, readSnapshot } from '#lib/server/live';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ url }) => {
+export const load: PageServerLoad = async ({ url }) => {
   const sport = url.searchParams.get('sport') ?? 'all';
   const sort = url.searchParams.get('sort') ?? 'edge';
-  const fixtures = getFixtures();
-  const fixtureMap = new Map(fixtures.map((f) => [f.id, f]));
+  const [live, cards, board] = await Promise.all([liveFixtures(), liveCards(), readSnapshot<any[]>('board')]);
+  const fixtures = live ?? getFixtures();
+  const cardFor = (fixture: (typeof fixtures)[number]) => cards?.[fixture.id] ?? cardOf(getPrediction(fixture));
 
   const bets: any[] = [];
-  for (const fixture of fixtures) {
-    if (fixture.status === 'finished') continue;
-    const prediction = getPrediction(fixture);
-    for (const bet of prediction.valueBets) {
+  if (board?.length) {
+    for (const bet of board) {
+      const fixture = bet.fixture;
+      if (!fixture || fixture.status === 'finished') continue;
       if (sport !== 'all' && fixture.sport !== sport) continue;
       const league = LEAGUE_MAP[fixture.leagueId];
+      const card = cardFor(fixture);
       bets.push({
         ...bet,
         fixtureId: fixture.id,
@@ -29,9 +33,33 @@ export const load: PageServerLoad = ({ url }) => {
         away: TEAM_MAP[fixture.awayId].name,
         homeShort: TEAM_MAP[fixture.homeId].shortName,
         awayShort: TEAM_MAP[fixture.awayId].shortName,
-        modelConfidence: prediction.confidence,
+        modelConfidence: card.confidence,
         risk: bet.modelProbability > 0.6 ? 'low' : bet.modelProbability > 0.4 ? 'medium' : 'high'
       });
+    }
+  } else {
+    for (const fixture of fixtures) {
+      if (fixture.status === 'finished') continue;
+      const prediction = cardFor(fixture);
+      for (const bet of prediction.valueBets) {
+        if (sport !== 'all' && fixture.sport !== sport) continue;
+        const league = LEAGUE_MAP[fixture.leagueId];
+        bets.push({
+          ...bet,
+          fixtureId: fixture.id,
+          kickoff: fixture.kickoff,
+          status: fixture.status,
+          sport: fixture.sport,
+          league: league.shortName,
+          leagueColour: league.colour,
+          home: TEAM_MAP[fixture.homeId].name,
+          away: TEAM_MAP[fixture.awayId].name,
+          homeShort: TEAM_MAP[fixture.homeId].shortName,
+          awayShort: TEAM_MAP[fixture.awayId].shortName,
+          modelConfidence: prediction.confidence,
+          risk: bet.modelProbability > 0.6 ? 'low' : bet.modelProbability > 0.4 ? 'medium' : 'high'
+        });
+      }
     }
   }
 
@@ -73,7 +101,7 @@ export const load: PageServerLoad = ({ url }) => {
       fixtures: uniqueFixtures.size
     },
     noValue: fixtures
-      .filter((f) => f.status === 'scheduled' && getPrediction(f).valueBets.length === 0)
+      .filter((f) => f.status === 'scheduled' && cardFor(f).valueBets.length === 0)
       .slice(0, 6)
       .map((f) => ({
         fixtureId: f.id,
@@ -81,8 +109,8 @@ export const load: PageServerLoad = ({ url }) => {
         league: LEAGUE_MAP[f.leagueId].shortName,
         home: TEAM_MAP[f.homeId].name,
         away: TEAM_MAP[f.awayId].name,
-        confidence: getPrediction(f).confidence,
-        pick: getPrediction(f).recommended
+        confidence: cardFor(f).confidence,
+        pick: cardFor(f).recommended
       }))
   };
 };

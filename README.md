@@ -80,21 +80,51 @@ node scripts/seed.mjs   # seed sports, leagues, teams, fixtures, predictions, mo
 
 Set `PUBLIC_CONVEX_URL` in `.env` to the deployment URL. The schema covers users, subscriptions, settings, sports, leagues, teams, fixtures, markets, odds, predictions, market predictions, value selections, model versions, training runs, data sources, scrape jobs, paper bets, watchlists, analysis reports, API keys and audit logs.
 
-### Cloudflare Pages
+### Cloudflare production
+
+The production deployment is live at **https://cavebettor.ewinproject.org**.
 
 ```bash
-npm run build
-npx wrangler pages deploy .svelte-kit/cloudflare
+npm run deploy:cloudflare   # build + wrangler deploy (custom domain, Cloudflare Workers static assets)
+npm run deploy:pages        # build + wrangler pages deploy (Pages project fallback)
 ```
 
-`wrangler.toml` sets `pages_build_output_dir = ".svelte-kit/cloudflare"`. Add production secrets under **Pages → Settings → Environment variables**:
+`wrangler.worker.jsonc` binds the custom domain `cavebettor.ewinproject.org`, serves the SvelteKit worker and mounts the build output as static assets. `wrangler.toml` keeps the equivalent Pages project (`cavebettor.pages.dev`) deployable. Both run the same SvelteKit output.
+
+Set production values as Worker/Pages secrets (never commit them):
 
 ```
-PUBLIC_CONVEX_URL, PAYSTACK_SECRET_KEY, OPENAI_API_KEY,
-API_FOOTBALL_KEY, THE_ODDS_API_KEY, SPORTSDB_KEY, BALLDONTLIE_KEY
+PUBLIC_CONVEX_URL, PUBLIC_CONVEX_SITE_URL, PUBLIC_SITE_URL, PUBLIC_DEMO_MODE,
+EWIN_SITE_URL, EWIN_CONVEX_SITE_URL, CONVEX_HTTP_ACTIONS_URL,
+SESSION_SECRET, ADMIN_SESSION_SECRET, CAVEBETTOR_SYNC_SECRET,
+SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD,
+AGNES_AI_KEY, AGNES_API_BASE_URL, AGNES_MODEL,
+GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
+RESEND_API_KEY, RESEND_FROM_EMAIL,
+CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN,
+R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT, R2_BUCKET
 ```
 
-> The Cloudflare adapter pinned in this repo (`@sveltejs/adapter-cloudflare@7.x`) is the last line that supports **Pages**. Newer adapters target Workers. Both run the same SvelteKit output.
+Convex deployment: `https://expert-goose-697.eu-west-1.convex.cloud` (HTTP actions on `https://expert-goose-697.eu-west-1.convex.site`). The app reads Convex snapshots first and automatically falls back to the local deterministic engine if Convex is unavailable. A Cloudflare cron worker (`workers/sync-cron.ts`, deployed with `wrangler.cron.jsonc`) refreshes the snapshots every 15 minutes through the secret-guarded `/api/sync` route.
+
+### Authentication
+
+| Route | Purpose |
+| --- | --- |
+| `/auth/login` | Google, GitHub and E-WIN sign-in |
+| `/auth/google`, `/auth/github` | OAuth start; callbacks at `/auth/google/callback` and `/auth/github/callback` |
+| `/auth/ewin` | E-WIN Hub SSO (`platform=cavebettor`) |
+| `/auth/admin` | Super-admin password console |
+| `/admin` | Owner console: live sync, users, revenue, integration diagnostics |
+
+Register the exact redirect URIs in the Google Cloud and GitHub OAuth consoles:
+
+```
+https://cavebettor.ewinproject.org/auth/google/callback
+https://cavebettor.ewinproject.org/auth/github/callback
+```
+
+The owner console lists these callback URLs and the live status of Convex, Agnes AI, Resend and E-WIN SSO.
 
 ---
 

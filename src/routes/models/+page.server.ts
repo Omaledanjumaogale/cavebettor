@@ -1,19 +1,21 @@
 import { MODELS } from '#lib/data/catalog';
 import { getModelPerformance, getTrainingRuns } from '#lib/engine/analytics';
+import { readSnapshot } from '#lib/server/live';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = () => {
+export const load: PageServerLoad = async () => {
+  const snapshot: any = await readSnapshot('models');
   const performance = getModelPerformance();
   const runs = getTrainingRuns();
   return {
-    models: performance.map((p) => ({
+    models: snapshot?.models ?? performance.map((p) => ({
       ...p.model,
       runs: p.runs.slice(0, 3),
       accuracySeries: p.accuracySeries,
       logLossSeries: p.logLossSeries
     })),
-    runs: runs.slice(0, 12),
-    summary: {
+    runs: snapshot?.runs ?? runs.slice(0, 12),
+    summary: snapshot?.summary ?? {
       total: MODELS.length,
       production: MODELS.filter((m) => m.status === 'production').length,
       shadow: MODELS.filter((m) => m.status === 'shadow').length,
@@ -24,7 +26,7 @@ export const load: PageServerLoad = () => {
       driftAlerts: MODELS.filter((m) => m.drift > 0.025).length,
       completedRuns: runs.filter((r) => r.status === 'completed').length
     },
-    pipeline: [
+    pipeline: snapshot?.pipeline ?? [
       { step: '01', title: 'Collect', detail: 'Fixtures, odds and team statistics arrive from scrapers and licensed APIs every 15 minutes.' },
       { step: '02', title: 'Normalise', detail: 'Team aliases, market names and prices are mapped to one canonical schema with validation gates.' },
       { step: '03', title: 'Featurise', detail: 'Rolling xG, Elo, rest, travel, availability and market priors form 142 sport-aware features.' },

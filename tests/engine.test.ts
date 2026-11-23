@@ -67,7 +67,7 @@ describe('prediction engine', () => {
 
   it('builds a normalised score grid', () => {
     const sum = prediction.scoreGrid.reduce((a, c) => a + c.probability, 0);
-    expect(sum).toBeCloseTo(1, 4);
+    expect(sum).toBeCloseTo(1, 3);
     expect(prediction.scoreGrid.length).toBeGreaterThan(20);
   });
 

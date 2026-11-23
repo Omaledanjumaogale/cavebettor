@@ -1,13 +1,15 @@
 import { getBankroll, getMetrics, getPaperBets } from '#lib/engine/analytics';
+import { readSnapshot } from '#lib/server/live';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = () => {
-  const bets = getPaperBets();
-  const metrics = getMetrics();
+export const load: PageServerLoad = async () => {
+  const snapshot: any = await readSnapshot('paper');
+  const bets: any[] = snapshot?.bets ?? getPaperBets();
+  const metrics: any = snapshot?.metrics ?? getMetrics();
   return {
     metrics,
     bets: bets.map((b) => ({ ...b })),
-    curve: getBankroll().filter((_, i) => i % 3 === 0),
+    curve: (snapshot?.curve ?? getBankroll()).filter((_: any, i: number) => i % 3 === 0),
     summary: {
       open: bets.filter((b) => b.status === 'open').length,
       won: bets.filter((b) => b.status === 'won').length,

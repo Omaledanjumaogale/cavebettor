@@ -16,14 +16,14 @@
   let loading = $state(false);
   let billingMessage = $state('');
 
-  const keyRows = [
+  const keyRows = $derived([
     { id: 'apiFootball', label: 'API-Football', env: 'API_FOOTBALL_KEY', configured: data.keys.apiFootball, hint: 'Fixtures, lineups, injuries and odds' },
     { id: 'oddsApi', label: 'The Odds API', env: 'THE_ODDS_API_KEY', configured: data.keys.oddsApi, hint: 'Bookmaker prices and movement' },
     { id: 'sportsdb', label: 'TheSportsDB', env: 'SPORTSDB_KEY', configured: data.keys.sportsdb, hint: 'Badges, venues and schedules' },
     { id: 'balldontlie', label: 'BallDontLie', env: 'BALLDONTLIE_KEY', configured: data.keys.balldontlie, hint: 'NBA box scores and availability' },
     { id: 'llm', label: 'LLM analyst', env: 'OPENAI_API_KEY', configured: data.keys.llm, hint: 'Grounded narrative match reports' },
     { id: 'paystack', label: 'Paystack', env: 'PAYSTACK_SECRET_KEY', configured: data.keys.paystack, hint: 'NGN subscription checkout' }
-  ];
+  ]);
 
   onMount(() => {
     try {

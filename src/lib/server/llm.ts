@@ -1,3 +1,4 @@
+import { env as privateEnv } from '$env/dynamic/private';
 import type { Fixture, Prediction } from '#lib/types';
 import { LEAGUE_MAP, TEAM_MAP } from '#lib/data/catalog';
 import { getPrediction } from '#lib/engine/predictions';
@@ -64,7 +65,7 @@ function deterministic(fixture: Fixture, prediction: Prediction): AnalysisResult
     sections: [
       {
         heading: 'The model view',
-        body: `The Dockon–Coles and CaveBoost components are anchored by a vig-free market consensus. ${home.name} carry a ${home.form.join('')} recent sequence and ${home.xgFor.toFixed(2)} xG per match; ${away.name} arrive at ${away.form.join('')} with ${away.xgAgainst.toFixed(2)} xGA. The model's top scorelines are ${prediction.topScorelines.slice(0, 3).map((s) => `${s.home}–${s.away}`).join(', ')}.`
+        body: `The Dixon–Coles and CaveBoost components are anchored by a vig-free market consensus. ${home.name} carry a ${home.form.join('')} recent sequence and ${home.xgFor.toFixed(2)} xG per match; ${away.name} arrive at ${away.form.join('')} with ${away.xgAgainst.toFixed(2)} xGA. The model's top scorelines are ${prediction.topScorelines.slice(0, 3).map((s) => `${s.home}–${s.away}`).join(', ')}.`
       },
       {
         heading: 'Where the value sits',
@@ -83,18 +84,26 @@ function deterministic(fixture: Fixture, prediction: Prediction): AnalysisResult
 
 export async function generateAnalysis(fixture: Fixture, prediction = getPrediction(fixture)): Promise<AnalysisResult> {
   const fallback = deterministic(fixture, prediction);
-  const apiKey = process.env.OPENAI_API_KEY;
+  const agnesKey = privateEnv.AGNES_AI_KEY || process.env.AGNES_AI_KEY;
+  const openaiKey = privateEnv.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  const apiKey = agnesKey || openaiKey;
   if (!apiKey) return fallback;
+  const baseUrl = agnesKey
+    ? privateEnv.AGNES_API_BASE_URL || process.env.AGNES_API_BASE_URL || 'https://apihub.agnes-ai.com/v1'
+    : 'https://api.openai.com/v1';
+  const model = agnesKey
+    ? privateEnv.AGNES_MODEL || process.env.AGNES_MODEL || 'agnes-3.0-flash'
+    : privateEnv.OPENAI_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
+  const timeout = setTimeout(() => controller.abort(), 25_000);
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
       signal: controller.signal,
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        model,
         temperature: 0.3,
         response_format: { type: 'json_object' },
         messages: [
@@ -115,7 +124,7 @@ export async function generateAnalysis(fixture: Fixture, prediction = getPredict
     if (!parsed.headline || !parsed.summary || !Array.isArray(parsed.sections)) return fallback;
     return {
       provider: 'llm',
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      model,
       generatedAt: new Date().toISOString(),
       headline: parsed.headline,
       summary: parsed.summary,

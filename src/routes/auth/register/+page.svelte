@@ -1,88 +1,33 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { Eye, EyeOff, ArrowRight, ShieldCheck, Check, Building2, User, Mail, Lock } from '@lucide/svelte';
+  import { ArrowRight, Sparkles, ShieldCheck, Network } from '@lucide/svelte';
   import BrandMark from '#lib/components/BrandMark.svelte';
-
-  let name = $state('');
-  let email = $state('');
-  let workspace = $state('Lagos Value Desk');
-  let password = $state('');
-  let show = $state(false);
-  let loading = $state(false);
-  let error = $state('');
-
-  async function submit(e: Event) {
-    e.preventDefault();
-    if (!name.trim() || !email.includes('@') || password.length < 8) {
-      error = 'Enter your name, a valid email and a password of at least 8 characters.';
-      return;
-    }
-    loading = true;
-    error = '';
-    setTimeout(() => goto('/'), 700);
-  }
 </script>
 
-<svelte:head><title>Create your workspace — CaveBettor</title></svelte:head>
+<svelte:head><title>Create account — CaveBettor</title></svelte:head>
 
-<div class="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
-  <div class="relative hidden overflow-hidden border-r border-white/[0.06] bg-pitch-900/50 lg:flex lg:flex-col lg:justify-between lg:p-10">
-    <div class="mesh absolute inset-0 opacity-40"></div>
-    <div class="absolute -left-20 top-20 h-80 w-80 rounded-full bg-mint/10 blur-3xl"></div>
-    <a href="/" class="relative" aria-label="CaveBettor home"><BrandMark size={36} withWordmark /></a>
-    <div class="relative">
-      <span class="chip chip-lime">₦5,000 / month · everything included</span>
-      <h2 class="display mt-5 max-w-md text-[30px] font-bold leading-tight text-white">One workspace.<br /><span class="text-gradient">Every edge, measured.</span></h2>
-      <div class="mt-5 space-y-2">
-        {#each ['All 5 sports and 20 leagues', '84 markets with model probabilities', 'Live in-play re-pricing every 30 seconds', 'Model lab, calibration and drift alerts', 'Data pipeline with API key slots', 'Paper ledger with closing-line value'] as item}
-          <div class="flex items-center gap-2 text-[11px] text-fog"><Check size={12} class="text-mint" /> {item}</div>
-        {/each}
-      </div>
-    </div>
-    <div class="relative rounded-xl border border-white/[0.08] bg-black/20 p-4 text-[9.5px] leading-relaxed text-fog-dim">
-      Start on the free tier. Upgrade to Pro when you want the full value board, live probabilities and the model lab. Cancel anytime.
-    </div>
-  </div>
+<div class="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5 py-10">
+  <a href="/" aria-label="CaveBettor home" class="mb-8"><BrandMark size={36} withWordmark /></a>
+  <div class="panel p-6">
+    <span class="chip chip-lime"><Sparkles size={10} /> Create account</span>
+    <h1 class="display mt-4 text-[26px] font-bold tracking-tight text-white">Start with a verified identity.</h1>
+    <p class="mt-1.5 text-[12px] leading-relaxed text-fog">CaveBettor uses Google, GitHub or your existing E-WIN account. We never store a password, and your provider never shares it with us.</p>
 
-  <div class="flex flex-col px-5 py-6 sm:px-10">
-    <div class="flex items-center justify-between lg:justify-end">
-      <a href="/" class="lg:hidden" aria-label="CaveBettor home"><BrandMark size={34} /></a>
-      <span class="text-[10.5px] text-fog">Already have an account? <a href="/auth/login" class="font-semibold text-lime hover:underline">Sign in</a></span>
+    <div class="mt-6 space-y-2.5">
+      <a href="/auth/google" class="btn w-full justify-center !py-3 text-[12px] font-semibold">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18A11 11 0 0 0 1 12c0 1.77.42 3.45 1.18 4.94l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z"/></svg>
+        Continue with Google
+      </a>
+      <a href="/auth/github" class="btn w-full justify-center !py-3 text-[12px] font-semibold">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 .5A11.5 11.5 0 0 0 .5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2.2c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56A11.5 11.5 0 0 0 23.5 12A11.5 11.5 0 0 0 12 .5z"/></svg>
+        Continue with GitHub
+      </a>
+      <a href="/auth/ewin" class="btn w-full justify-center !py-3 text-[12px] font-semibold border-violet/30 bg-violet/10 text-violet"><Network size={15} /> Use my E-WIN account</a>
     </div>
-    <div class="mx-auto w-full max-w-sm py-8">
-      <span class="chip chip-mint"><Building2 size={10} /> New workspace</span>
-      <h1 class="display mt-3 text-[26px] font-bold tracking-tight text-white">Create your desk.</h1>
-      <p class="mt-1 text-[12px] text-fog">Free to explore. No card required.</p>
 
-      <form class="mt-5 space-y-3" onsubmit={submit}>
-        <div>
-          <label class="label" for="name">Full name</label>
-          <div class="relative"><User size={13} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fog-dim" /><input id="name" class="input !py-2.5 pl-9" bind:value={name} autocomplete="name" placeholder="Omale Danjuma" /></div>
-        </div>
-        <div>
-          <label class="label" for="email">Work email</label>
-          <div class="relative"><Mail size={13} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fog-dim" /><input id="email" class="input !py-2.5 pl-9" type="email" bind:value={email} autocomplete="email" placeholder="you@desk.ng" /></div>
-        </div>
-        <div>
-          <label class="label" for="workspace">Workspace name</label>
-          <div class="relative"><Building2 size={13} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fog-dim" /><input id="workspace" class="input !py-2.5 pl-9" bind:value={workspace} /></div>
-        </div>
-        <div>
-          <label class="label" for="password">Password</label>
-          <div class="relative">
-            <Lock size={13} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fog-dim" />
-            <input id="password" class="input !py-2.5 pl-9 pr-9" type={show ? 'text' : 'password'} bind:value={password} autocomplete="new-password" placeholder="At least 8 characters" />
-            <button type="button" onclick={() => (show = !show)} class="absolute right-2.5 top-1/2 -translate-y-1/2 text-fog-dim hover:text-white" aria-label="Toggle password visibility">{#if show}<EyeOff size={14} />{:else}<Eye size={14} />{/if}</button>
-          </div>
-        </div>
-        {#if error}<div class="text-[10.5px] text-rose">{error}</div>{/if}
-        <button type="submit" class="btn btn-primary w-full !py-2.5" disabled={loading}>{loading ? 'Creating workspace…' : 'Create workspace'} {#if !loading}<ArrowRight size={14} />{/if}</button>
-        <p class="text-[9px] leading-relaxed text-fog-dim">By continuing you agree to the terms of use and privacy policy. CaveBettor is research software for adults 18+. It does not accept deposits or place bets.</p>
-      </form>
-      <div class="mt-5 flex items-start gap-2 rounded-lg border border-sky/15 bg-sky/[0.05] p-2.5 text-[9.5px] leading-relaxed text-fog">
-        <ShieldCheck size={11} class="mt-0.5 shrink-0 text-sky" />
-        <span>Demo build: account creation is simulated and stored only in this browser session.</span>
-      </div>
+    <p class="mt-5 text-[10.5px] leading-relaxed text-fog-dim">Creating an account starts the Starter plan. Pro is ₦5,000/month and can be activated from the subscription page. Research software for adults 18+.</p>
+    <div class="mt-5 flex items-center justify-between border-t border-white/[0.06] pt-4 text-[10.5px] text-fog-dim">
+      <a href="/auth/login" class="flex items-center gap-1 hover:text-white">Already a member <ArrowRight size={11} /></a>
+      <a href="/auth/admin" class="flex items-center gap-1 hover:text-rose"><ShieldCheck size={11} /> Super admin</a>
     </div>
   </div>
 </div>

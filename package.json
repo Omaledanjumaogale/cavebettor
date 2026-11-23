@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "CaveBettor — harmonised sports prediction, odds intelligence and bankroll analytics workspace.",
+  "description": "CaveBettor \u00e2\u20ac\u201d harmonised sports prediction, odds intelligence and bankroll analytics workspace.",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -12,7 +12,10 @@
     "test": "vitest run",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "sync:live": "tsx scripts/sync-live.ts",
+    "deploy:cloudflare": "npm run build && wrangler deploy --config wrangler.worker.jsonc",
+    "deploy:pages": "npm run build && wrangler pages deploy .svelte-kit/cloudflare --project-name cavebettor --branch main"
   },
   "devDependencies": {
     "@cloudflare/workerd-windows-64": "^1.20261122.2",
@@ -25,7 +28,8 @@
     "tailwindcss": "latest",
     "typescript": "latest",
     "vite": "latest",
-    "vitest": "latest"
+    "vitest": "latest",
+    "tsx": "^4.23.15"
   },
   "dependencies": {
     "@fontsource-variable/inter": "latest",

@@ -1,8 +1,14 @@
+import { redirect } from '@sveltejs/kit';
 import { DATA_SOURCES, MODELS } from '#lib/data/catalog';
 import { getMetrics, getScrapeJobs, getTrainingRuns } from '#lib/engine/analytics';
-import type { PageServerLoad } from './$types';
+import { convexAdminOverview, syncLiveData } from '#lib/server/live';
+import { providerConfigured } from '#lib/server/auth';
+import { env as privateEnv } from '$env/dynamic/private';
+import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = () => {
+export const load: PageServerLoad = async ({ locals }) => {
+  if (!locals.user || locals.user.role !== 'super_admin') redirect(303, '/auth/admin?next=/admin');
+  const overview: any = await convexAdminOverview();
   const metrics = getMetrics();
   const users = [
     { name: 'Omale Danjuma', email: 'omale@cavebettor.ng', plan: 'Pro', status: 'active', workspace: 'Lagos Value Desk', joined: '2025-08-14', apiCalls: 18420 },
@@ -15,9 +21,30 @@ export const load: PageServerLoad = () => {
     { name: 'Segun Adeyemi', email: 'segun@example.ng', plan: 'Pro', status: 'cancelled', workspace: 'Ibadan Quant', joined: '2025-07-01', apiCalls: 440 }
   ];
 
+  const liveUsers = overview?.users?.map((u: any) => ({
+    name: u.name,
+    email: u.email,
+    plan: u.role === 'super_admin' ? 'Owner' : 'Pro',
+    status: 'active',
+    workspace: u.workspace,
+    joined: new Date(u.createdAt).toISOString().slice(0, 10),
+    apiCalls: 0
+  }));
+  const site = privateEnv.PUBLIC_SITE_URL || process.env.PUBLIC_SITE_URL || 'https://cavebettor.ewinproject.org';
+  const integrations = [
+    { id: 'google', label: 'Google OAuth', detail: 'OpenID · email · profile', status: providerConfigured('google') ? 'Configured' : 'Missing keys', callback: `${site}/auth/google/callback` },
+    { id: 'github', label: 'GitHub OAuth', detail: 'read:user · user:email', status: providerConfigured('github') ? 'Configured' : 'Missing keys', callback: `${site}/auth/github/callback` },
+    { id: 'ewin', label: 'E-WIN Hub SSO', detail: 'Single-use signed ticket', status: privateEnv.EWIN_CONVEX_SITE_URL ? 'Configured' : 'Missing keys', callback: `${site}/auth/ewin/callback` },
+    { id: 'agnes', label: 'Agnes AI', detail: privateEnv.AGNES_MODEL || 'agnes-3.0-flash', status: privateEnv.AGNES_AI_KEY ? 'Live' : 'Missing key', callback: null },
+    { id: 'convex', label: 'Convex live sync', detail: 'Snapshots with local fallback', status: overview ? 'Live' : 'Fallback', callback: null },
+    { id: 'resend', label: 'Resend email', detail: privateEnv.RESEND_FROM_EMAIL || 'Not configured', status: privateEnv.RESEND_API_KEY ? 'Configured' : 'Missing key', callback: null }
+  ];
   return {
+    adminUser: locals.user,
+    integrations,
+    live: overview,
     metrics,
-    users,
+    users: liveUsers?.length ? liveUsers : users,
     revenue: [
       { month: 'Sep', mrr: 286_000, subscribers: 61, churn: 2.1 },
       { month: 'Oct', mrr: 334_000, subscribers: 72, churn: 1.8 },
@@ -39,4 +66,17 @@ export const load: PageServerLoad = () => {
     runs: getTrainingRuns().slice(0, 5),
     models: MODELS.filter((m) => m.status === 'production').map((m) => ({ id: m.id, name: m.name, accuracy: m.accuracy, roi: m.roi, drift: m.drift }))
   };
+};
+
+
+export const actions: Actions = {
+  sync: async ({ locals }) => {
+    if (!locals.user || locals.user.role !== 'super_admin') return { ok: false, message: 'Owner access required.' };
+    try {
+      const result = await syncLiveData();
+      return { ok: true, message: `Synced ${result.fixtures} fixtures, ${result.predictions} predictions and ${result.valueSelections} value selections.` };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'Sync failed.' };
+    }
+  }
 };

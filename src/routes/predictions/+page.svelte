@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { Sparkles, ArrowUpRight, TrendingUp, Target, ShieldCheck, Info, ChevronRight, CircleSlash, Layers, Zap } from '@lucide/svelte';
   import ConfidenceMeter from '#lib/components/ConfidenceMeter.svelte';
@@ -16,7 +17,7 @@
 
   const top = $derived(data.bets.slice(0, 3));
   const rest = $derived(data.bets.slice(3));
-  let sort = $state(data.filters.sort);
+  let sort = $state(untrack(() => data.filters.sort));
 </script>
 
 <svelte:head><title>Value board — CaveBettor</title></svelte:head>

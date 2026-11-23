@@ -14,14 +14,15 @@
     children,
     liveCount = 0,
     valueCount = 0,
-    fixturesCount = 0
-  }: { children: Snippet; liveCount?: number; valueCount?: number; fixturesCount?: number } = $props();
+    fixturesCount = 0,
+    user = null
+  }: { children: Snippet; liveCount?: number; valueCount?: number; fixturesCount?: number; user?: typeof DEMO_USER | null } = $props();
 
   let searchOpen = $state(false);
   let drawer = $state(false);
   let userMenu = $state(false);
 
-  const nav = [
+  const nav = $derived([
     {
       label: 'Intelligence',
       items: [
@@ -55,13 +56,14 @@
         { href: '/admin', label: 'Admin', icon: ShieldCheck, badge: '' }
       ]
     }
-  ];
+  ]);
 
   const active = (href: string) => (href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href));
   const currentLabel = $derived(
     nav.flatMap((g) => g.items).find((i) => active(i.href))?.label ?? 'Overview'
   );
-  const plan = $derived(DEMO_USER.plan);
+  const viewer = $derived(user ?? DEMO_USER);
+  const plan = $derived(viewer.plan);
 
   const mobileItems = [
     { href: '/', label: 'Home', icon: LayoutDashboard },
@@ -83,7 +85,7 @@
       <button class="flex w-full items-center justify-between gap-2 text-left" onclick={() => (userMenu = !userMenu)}>
         <div class="min-w-0">
           <div class="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-fog-dim">Workspace</div>
-          <div class="mt-0.5 truncate text-[12px] font-semibold text-white">{DEMO_USER.workspace}</div>
+          <div class="mt-0.5 truncate text-[12px] font-semibold text-white">{viewer.workspace}</div>
         </div>
         <ChevronDown size={14} class="shrink-0 text-fog-dim" />
       </button>
@@ -130,12 +132,13 @@
     </div>
 
     <div class="flex shrink-0 items-center gap-2.5 border-t border-white/[0.07] px-4 py-3">
-      <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-mint to-sky text-[11px] font-bold text-pitch-950">{DEMO_USER.avatar}</span>
+      <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-mint to-sky text-[11px] font-bold text-pitch-950">{viewer.avatar}</span>
       <div class="min-w-0 flex-1">
-        <div class="truncate text-[11.5px] font-semibold text-white">{DEMO_USER.name}</div>
-        <div class="truncate text-[9.5px] text-fog-dim">{DEMO_USER.email}</div>
+        <div class="truncate text-[11.5px] font-semibold text-white">{viewer.name}</div>
+        <div class="truncate text-[9.5px] text-fog-dim">{viewer.email}</div>
       </div>
       <a href="/settings" class="btn-icon !h-7 !w-7" aria-label="Account settings"><Settings size={13} /></a>
+      <a href="/auth/logout" class="btn-icon !h-7 !w-7" aria-label="Sign out" title="Sign out"><LogOut size={13} /></a>
     </div>
   </aside>
 
@@ -163,8 +166,9 @@
           {/each}
         </nav>
         <div class="border-t border-white/10 p-4 text-[11px] text-fog">
-          Signed in as <span class="text-white">{DEMO_USER.name}</span>
+          Signed in as <span class="text-white">{viewer.name}</span>
           <div class="mt-1 text-[10px] text-fog-dim">{plan.name} · ₦{plan.priceNgn.toLocaleString('en-NG')}/mo</div>
+          <a href="/auth/logout" class="mt-2 inline-flex items-center gap-1 text-[10.5px] text-rose hover:underline"><LogOut size={11} /> Sign out</a>
         </div>
       </div>
     </div>
@@ -203,7 +207,7 @@
           <span class="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-lime"></span>
         </button>
         <div class="hidden items-center gap-2 sm:flex">
-          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-mint to-sky text-[10px] font-bold text-pitch-950">{DEMO_USER.avatar}</span>
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-mint to-sky text-[10px] font-bold text-pitch-950">{viewer.avatar}</span>
         </div>
       </div>
     </header>

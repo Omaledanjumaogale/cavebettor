@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { BrainCircuit, RefreshCw, ChevronDown, ChevronUp, Play, CheckCircle2, AlertTriangle, ShieldCheck, Database, Cpu, GitBranch, Activity, ArrowUpRight } from '@lucide/svelte';
   import LineChart from '#lib/components/LineChart.svelte';
   import Sparkline from '#lib/components/Sparkline.svelte';
@@ -11,10 +11,10 @@
 
   let { data } = $props();
   let expanded = $state<string | null>(null);
-  let selected = $state(data.models[0].id);
+  let selected = $state(untrack(() => data.models[0].id));
   let queuing = $state<string | null>(null);
   let message = $state('');
-  let runs = $state(data.runs);
+  let runs = $state(untrack(() => data.runs));
 
   const activeModel = $derived(data.models.find((m: any) => m.id === selected) ?? data.models[0]);
 
@@ -219,7 +219,7 @@
               <td class="num text-right text-[10px] text-fog">{run.trainRows.toLocaleString()}</td>
               <td class="num text-right text-[10.5px] font-semibold text-white">{(run.metrics.accuracy * 100).toFixed(1)}%</td>
               <td class="num text-right text-[10.5px] font-semibold text-mint">+{run.metrics.roi.toFixed(1)}%</td>
-              <td><Sparkline values={run.walkForward.map((w) => w.roi)} width={80} height={20} colour={run.metrics.roi > 0 ? '#35e7a1' : '#ff6478'} strokeWidth={1.5} /></td>
+              <td><Sparkline values={run.walkForward.map((w: any) => w.roi)} width={80} height={20} colour={run.metrics.roi > 0 ? '#35e7a1' : '#ff6478'} strokeWidth={1.5} /></td>
             </tr>
           {/each}
         </tbody>

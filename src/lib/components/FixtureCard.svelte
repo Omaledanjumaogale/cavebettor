@@ -1,12 +1,13 @@
 <script lang="ts">
   import { LEAGUE_MAP, TEAM_MAP } from '#lib/data/catalog';
-  import type { Fixture, Prediction } from '#lib/types';
+  import type { Fixture } from '#lib/types';
+  import type { PredictionCard } from '#lib/snapshot';
   import { countdown, formatKickoff, formatTime } from '#lib/format';
   import TeamBadge from './TeamBadge.svelte';
   import ProbabilityBar from './ProbabilityBar.svelte';
   import ConfidenceMeter from './ConfidenceMeter.svelte';
 
-  let { fixture, prediction, compact = false }: { fixture: Fixture; prediction: Prediction; compact?: boolean } = $props();
+  let { fixture, prediction, compact = false }: { fixture: Fixture; prediction: PredictionCard; compact?: boolean } = $props();
   const league = $derived(LEAGUE_MAP[fixture.leagueId]);
   const home = $derived(TEAM_MAP[fixture.homeId]);
   const away = $derived(TEAM_MAP[fixture.awayId]);

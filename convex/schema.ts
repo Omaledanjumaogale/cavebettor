@@ -18,7 +18,7 @@ export default defineSchema({
     tokenIdentifier: v.optional(v.string()),
     name: v.string(),
     email: v.string(),
-    role: v.union(v.literal('owner'), v.literal('analyst'), v.literal('viewer'), v.literal('admin')),
+    role: v.union(v.literal('owner'), v.literal('analyst'), v.literal('viewer'), v.literal('admin'), v.literal('super_admin')),
     workspace: v.string(),
     timezone: v.string(),
     currency: v.literal('NGN'),
@@ -385,5 +385,48 @@ export default defineSchema({
     entity: v.optional(v.string()),
     entityId: v.optional(v.string()),
     createdAt: v.number()
-  }).index('by_created', ['createdAt'])
+  }).index('by_created', ['createdAt']),
+
+  /** Read-model snapshots written by the app sync worker. */
+  liveSnapshots: defineTable({
+    key: v.string(),
+    payload: v.string(),
+    counts: v.optional(v.any()),
+    generatedAt: v.number(),
+    updatedAt: v.number()
+  }).index('by_key', ['key']),
+
+  /** One full prediction document per fixture so responses stay under limits. */
+  livePredictions: defineTable({
+    fixtureKey: v.string(),
+    payload: v.string(),
+    generatedAt: v.number()
+  }).index('by_fixture', ['fixtureKey']),
+
+  /** Server-owned sync bookkeeping. */
+  syncState: defineTable({
+    key: v.string(),
+    lastSyncedAt: v.number(),
+    source: v.string(),
+    fixtures: v.number(),
+    predictions: v.number(),
+    valueSelections: v.number(),
+    version: v.string(),
+    detail: v.optional(v.string())
+  }).index('by_key', ['key']),
+
+  /** Server-side sessions created by Google, GitHub or E-WIN SSO. */
+  authSessions: defineTable({
+    tokenHash: v.string(),
+    email: v.string(),
+    name: v.string(),
+    provider: v.string(),
+    role: v.string(),
+    userId: v.optional(v.id('users')),
+    createdAt: v.number(),
+    lastSeenAt: v.number(),
+    expiresAt: v.number(),
+    userAgent: v.optional(v.string()),
+    ipHash: v.optional(v.string())
+  }).index('by_token', ['tokenHash']).index('by_email', ['email']).index('by_expiry', ['expiresAt'])
 });

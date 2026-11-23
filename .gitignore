@@ -8,7 +8,6 @@ build/
 !.env.example
 .DS_Store
 coverage/
-convex/_generated/
 *.log
 
 # local research artifacts (third-party README snapshots)

@@ -40,7 +40,12 @@
       <div class="flex min-w-0 items-center gap-3">
         <TeamBadge team={selected.home} size={38} />
         <div class="min-w-0">
-          <div class="truncate text-[14px] font-semibold text-white">{selected.home.name} vs {selected.away.name}</div>
+          <div class="flex items-center gap-2">
+            <div class="truncate text-[14px] font-semibold text-white">{selected.home.name} vs {selected.away.name}</div>
+            {#if selected.fixture.status === 'live' || selected.fixture.status === 'halftime'}
+              <span class="chip chip-rose !text-[9px]"><span class="live-dot h-1 w-1 rounded-full bg-rose"></span> {selected.fixture.minute}′ · {selected.fixture.score.home}–{selected.fixture.score.away}</span>
+            {/if}
+          </div>
           <div class="text-[10px] text-fog-dim">{selected.league.name} · {formatKickoff(selected.fixture.kickoff)} · {selected.fixture.round}</div>
         </div>
         <TeamBadge team={selected.away} size={38} />
