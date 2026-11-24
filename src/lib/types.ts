@@ -55,6 +55,8 @@ export type FormResult = 'W' | 'D' | 'L';
 export interface Fixture {
   id: string;
   sport: SportId;
+  /** Set when a fixture has moved from live into the results bucket. */
+  finishedAt?: string;
   leagueId: string;
   homeId: string;
   awayId: string;
@@ -196,7 +198,10 @@ export interface Prediction {
   dataQuality: number;
   edge: number;
   valueBets: ValueBet[];
+  /** Alias kept for existing consumers; same object as `recommended`. */
   recommended: Recommendation;
+  /** Every positive selection for this fixture, ranked by model probability. */
+  recommendations: Recommendation[];
   insights: Insight[];
   expectedPoints?: { home: number; away: number };
   spread?: { line: number; homeCover: number; awayCover: number };

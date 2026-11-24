@@ -266,7 +266,7 @@
     <!-- Selection board -->
     <div class="space-y-3">
       <div class="panel flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
-        <div class="relative flex-1">
+        <div class="relative w-full min-w-0 flex-1">
           <Search size={14} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fog-dim" />
           <input
             class="w-full rounded-lg border border-white/10 bg-black/20 py-2 pl-9 pr-3 text-[12px] text-white placeholder:text-fog-dim focus:border-lime/40 focus:outline-none"
@@ -275,7 +275,7 @@
           />
         </div>
         <select
-          class="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[12px] text-white focus:border-lime/40 focus:outline-none"
+          class="w-full min-w-0 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[12px] text-white focus:border-lime/40 focus:outline-none sm:w-auto"
           bind:value={sportFilter}
         >
           <option value="all">All sports</option>
@@ -283,10 +283,10 @@
             <option value={sport.label}>{sport.label} ({sport.count})</option>
           {/each}
         </select>
-        <label class="flex items-center gap-2 text-[11px] text-fog">
+        <label class="flex w-full items-center gap-2 text-[11px] text-fog sm:w-auto">
           Min edge
-          <input type="range" min="0.5" max="8" step="0.5" bind:value={minEdge} class="w-24 accent-lime" />
-          <span class="num w-10 text-right text-white">{Number(minEdge).toFixed(1)}%</span>
+          <input type="range" min="0.5" max="8" step="0.5" bind:value={minEdge} class="min-w-0 flex-1 accent-lime sm:w-24 sm:flex-none" />
+          <span class="num w-10 shrink-0 text-right text-white">{Number(minEdge).toFixed(1)}%</span>
         </label>
       </div>
 

@@ -151,7 +151,28 @@ export function getMetrics(): WorkspaceMetrics {
   };
 }
 
+
+/**
+ * Engine aggregates are deterministic over the local fixture book, and each
+ * one prices every fixture. Caching them per isolate keeps a page render inside
+ * the Worker CPU budget while warm.
+ */
+const aggregateMemo = new Map<string, { at: number; value: unknown }>();
+const AGGREGATE_TTL = 5 * 60_000;
+
+function memoized<T>(key: string, build: () => T): T {
+  const hit = aggregateMemo.get(key);
+  if (hit && Date.now() - hit.at < AGGREGATE_TTL) return hit.value as T;
+  const value = build();
+  aggregateMemo.set(key, { at: Date.now(), value });
+  return value;
+}
+
 export function getAnalytics(): AnalyticsSummary {
+  return memoized('analytics', () => buildAnalytics());
+}
+
+function buildAnalytics(): AnalyticsSummary {
   const curve = getBankroll();
   const labels = curve.filter((_, i) => i % 7 === 0).map((p) => p.date);
   const rand = mulberry32(hashString('analytics-v2'));
@@ -258,6 +279,10 @@ export function getScrapeJobs(): ScrapeJob[] {
 }
 
 export function getDashboard() {
+  return memoized('dashboard', () => buildDashboard());
+}
+
+function buildDashboard() {
   const fixtures = getFixtures();
   const live = fixtures.filter((f) => f.status === 'live' || f.status === 'halftime');
   const upcoming = fixtures.filter((f) => f.status === 'scheduled');
@@ -327,6 +352,10 @@ export function getLeagueTable(leagueId: string) {
 }
 
 export function getDailyBrief() {
+  return memoized('brief', () => buildDailyBrief());
+}
+
+function buildDailyBrief() {
   const fixtures = getFixtures();
   const live = fixtures.filter((f) => f.status === 'live' || f.status === 'halftime');
   const value = getTopValueBets(5, fixtures);

@@ -14,7 +14,8 @@ export const load: PageServerLoad = async ({ url }) => {
     liveCards(),
     readMarketPrices()
   ]);
-  const upcoming = universe.fixtures.filter((f) => f.status !== 'finished');
+  // Price a bounded slate: the whole window is too large to model per request.
+  const upcoming = universe.fixtures.filter((f) => f.status !== 'finished').slice(0, 40);
   const selectedId = url.searchParams.get('id') ?? upcoming[0]?.id;
   const fixture = upcoming.find((f) => f.id === selectedId) ?? upcoming[0];
   const prediction = (await livePrediction(fixture.id)) ?? getPrediction(fixture);

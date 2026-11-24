@@ -30,6 +30,7 @@ export const FEED_SPORTS: ApiFootballSport[] = ['football', 'basketball', 'iceho
 const FEED_KEY = 'feed/fixtures';
 const META_KEY = 'feed/meta';
 const LIVE_KEY = 'feed/live';
+const RESULTS_KEY = 'feed/results';
 const LOCK_KEY = 'feed/lock';
 
 /** How long a collected feed is considered fresh for page rendering. */
@@ -161,33 +162,112 @@ export async function refreshProviderFeed(options: { liveOnly?: boolean; sports?
     await writeCache(FEED_KEY, fixtures, 6 * 3600_000, 'api-football');
   }
   await writeCache(META_KEY, meta, 6 * 3600_000, 'api-football');
+  feedMemo = null;
+  metaMemo = null;
   return meta;
+}
+
+/**
+ * Per-isolate memo of the parsed feed.
+ *
+ * The collected window is ~1.3 MB of JSON. Re-reading and re-parsing it on
+ * every page load is what pushes a request over the Worker CPU budget (and
+ * bills R2 reads for data that has not changed), so the parsed array is kept
+ * in memory for a short window. Convex/R2 stay untouched while it is warm.
+ */
+const MEMO_MS = 45_000;
+let feedMemo: { at: number; fixtures: Fixture[] } | null = null;
+
+/** Drop the isolate memo. Used by tests and after a collection writes new data. */
+export function resetFeedMemo(): void {
+  feedMemo = null;
+  metaMemo = null;
 }
 
 /** Read the cached provider fixtures with the latest live sweep overlaid. */
 export async function readProviderFixtures(): Promise<Fixture[]> {
+  if (feedMemo && Date.now() - feedMemo.at < MEMO_MS) return feedMemo.fixtures;
+
   const [cached, live] = await Promise.all([readCache<Fixture[]>(FEED_KEY, true), readCache<Fixture[]>(LIVE_KEY, true)]);
   const fixtures = Array.isArray(cached?.value) ? cached.value.slice() : [];
   const liveRows = Array.isArray(live?.value) ? live.value : [];
 
+  const byId = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
+
   if (liveRows.length) {
     // The live sweep is authoritative for in-play score/clock, and can also
     // introduce matches that started after the last full collection.
-    const byId = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
     for (const row of liveRows) byId.set(row.id, { ...(byId.get(row.id) ?? {}), ...row });
+  }
+
+  // Matches that have left the in-play list are finished: keep the last known
+  // score so the board moves them into results instead of reverting to
+  // "scheduled 0–0".
+  const results = await readCache<Record<string, { home: number; away: number; at: number; period?: string }>>(RESULTS_KEY, true);
+  if (results?.value) {
+    for (const [id, result] of Object.entries(results.value)) {
+      const existing = byId.get(id);
+      if (!existing) continue;
+      if (existing.status === 'finished') continue;
+      byId.set(id, {
+        ...existing,
+        status: 'finished',
+        score: { home: result.home, away: result.away },
+        minute: undefined,
+        period: result.period ?? 'FT',
+        finishedAt: new Date(result.at).toISOString()
+      } as Fixture);
+    }
+  }
+
+  if (liveRows.length || results?.value) {
     fixtures.length = 0;
     fixtures.push(...byId.values());
   }
 
   if (fixtures.length) hydrateRegistry(fixtures);
+  if (fixtures.length) feedMemo = { at: Date.now(), fixtures };
   return fixtures;
 }
 
+let metaMemo: { at: number; value: (FeedMeta & { ageMs: number; stale: boolean }) | null } | null = null;
+
 export async function feedMeta(): Promise<(FeedMeta & { ageMs: number; stale: boolean }) | null> {
+  if (metaMemo && Date.now() - metaMemo.at < 30_000) {
+    const cached = metaMemo.value;
+    if (!cached) return null;
+    const ageMs = Date.now() - Date.parse(cached.generatedAt);
+    return { ...cached, ageMs, stale: ageMs > FEED_TTL };
+  }
   const meta = await readCache<FeedMeta>(META_KEY, true);
-  if (!meta) return null;
+  if (!meta) {
+    metaMemo = { at: Date.now(), value: null };
+    return null;
+  }
   const ageMs = Date.now() - Date.parse(meta.value.generatedAt);
-  return { ...meta.value, ageMs, stale: ageMs > FEED_TTL };
+  const value = { ...meta.value, ageMs, stale: ageMs > FEED_TTL };
+  metaMemo = { at: Date.now(), value };
+  return value;
+}
+
+/** Cheap counts for the shell; reuses the memo instead of re-reading the feed. */
+export async function wireCounts(): Promise<{ fixtures: number; live: number; upcoming: number; competitions: number; sports: number; updatedAt: string | null }> {
+  const [fixtures, meta] = await Promise.all([readProviderFixtures(), feedMeta()]);
+  const now = Date.now();
+  let live = 0;
+  let upcoming = 0;
+  for (const fixture of fixtures) {
+    if (fixture.status === 'live' || fixture.status === 'halftime') live += 1;
+    else if (fixture.status === 'scheduled' && +new Date(fixture.kickoff) > now) upcoming += 1;
+  }
+  return {
+    fixtures: fixtures.length,
+    live,
+    upcoming,
+    competitions: new Set(fixtures.map((f) => f.leagueId)).size,
+    sports: new Set(fixtures.map((f) => f.sport)).size,
+    updatedAt: meta?.generatedAt ?? null
+  };
 }
 
 /**
@@ -314,8 +394,32 @@ export async function refreshLiveNow(options: { sports?: ApiFootballSport[] } = 
 
   // Keep the other sports' live rows when this run only covers one sport.
   const previous = options.sports?.length ? await readCache<Fixture[]>(LIVE_KEY, true) : null;
-  const carried = Array.isArray(previous?.value) ? previous.value.filter((row) => !target.includes(row.sport as ApiFootballSport)) : [];
+  const previousRows = Array.isArray(previous?.value) ? previous.value : [];
+  const carried = options.sports?.length ? previousRows.filter((row) => !target.includes(row.sport as ApiFootballSport)) : [];
   const fixtures = dedupe([...carried, ...live]);
+
+  // Anything that was in play and is no longer in the sweep has finished.
+  const liveIds = new Set(fixtures.map((row) => row.id));
+  const departed = previousRows.filter((row) => target.includes(row.sport as ApiFootballSport) && !liveIds.has(row.id));
+  if (departed.length) {
+    const stored = await readCache<Record<string, { home: number; away: number; at: number; period?: string }>>(RESULTS_KEY, true);
+    const results = { ...(stored?.value ?? {}) };
+    for (const row of departed) {
+      results[row.id] = {
+        home: row.score?.home ?? 0,
+        away: row.score?.away ?? 0,
+        at: Date.now(),
+        period: row.period ?? 'FT'
+      };
+    }
+    // Keep the map small: one day of results is plenty for the board.
+    const entries = Object.entries(results)
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, 400);
+    await writeCache(RESULTS_KEY, Object.fromEntries(entries), 24 * 3600_000, 'api-football');
+  }
+
+  feedMemo = null;
   if (fixtures.length) {
     hydrateRegistry(fixtures);
     await writeCache(LIVE_KEY, fixtures, 3 * 3600_000, 'api-football');

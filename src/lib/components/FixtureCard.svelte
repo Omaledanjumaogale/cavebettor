@@ -3,7 +3,7 @@
   import { awayTeam, fixtureLeague, homeTeam } from '#lib/data/registry';
   import type { Fixture } from '#lib/types';
   import type { PredictionCard } from '#lib/snapshot';
-  import { countdown, formatKickoff, formatTime } from '#lib/format';
+  import { countdown, formatDate, formatKickoff, formatTime } from '#lib/format';
   import TeamBadge from './TeamBadge.svelte';
   import ProbabilityBar from './ProbabilityBar.svelte';
   import ConfidenceMeter from './ConfidenceMeter.svelte';
@@ -22,11 +22,12 @@
   class="panel panel-hover group relative block overflow-hidden p-4"
   aria-label={`${home.name} vs ${away.name} analysis`}
 >
-  <div class="mb-3 flex items-center justify-between gap-2">
+  <div class="mb-1 flex items-center justify-between gap-2">
     <div class="flex min-w-0 items-center gap-2">
       <span class="h-4 w-1 shrink-0 rounded-full" style={`background:${league?.colour ?? '#c9ff4d'}`}></span>
-      <span class="truncate text-[10.5px] font-semibold uppercase tracking-[0.1em] text-fog">{league?.shortName}</span>
-      <span class="hidden truncate text-[10px] text-fog-dim sm:inline">· {fixture.round}</span>
+      <span class="truncate text-[10.5px] font-semibold uppercase tracking-[0.08em] text-fog">
+        {league?.name ?? fixture.leagueId}
+      </span>
     </div>
     {#if live}
       <span class="chip chip-mint shrink-0 !py-0.5">
@@ -38,6 +39,13 @@
     {:else}
       <span class="shrink-0 text-right text-[10.5px] font-medium text-fog">{formatKickoff(fixture.kickoff)}</span>
     {/if}
+  </div>
+
+  <div class="mb-3 flex min-w-0 items-center gap-1 text-[10px] text-fog-dim">
+    {#if league?.country}<span class="shrink-0">{league.country}</span>{/if}
+    {#if fixture.round}<span class="shrink-0">·</span><span class="truncate">{fixture.round}</span>{/if}
+    <span class="ml-auto shrink-0">{formatDate(fixture.kickoff, { weekday: 'short', day: '2-digit', month: 'short' })}</span>
+    {#if !live && !finished}<span class="shrink-0">· {formatKickoff(fixture.kickoff)}</span>{/if}
   </div>
 
   <div class="space-y-2">
@@ -56,8 +64,8 @@
       home={prediction.probabilities.home}
       draw={prediction.probabilities.draw}
       away={prediction.probabilities.away}
-      homeLabel={home.shortName}
-      awayLabel={away.shortName}
+      homeLabel={home.name}
+      awayLabel={away.name}
       compact={compact}
     />
   </div>
@@ -65,14 +73,14 @@
   <div class="mt-3 flex items-center justify-between gap-2 border-t border-white/[0.055] pt-3">
     <div class="min-w-0">
       {#if topPick}
-        <div class="truncate text-[11.5px] font-semibold text-white">{topPick.selection}</div>
+        <div class="line-clamp-2 text-[11.5px] font-semibold leading-snug text-white">{topPick.selection}</div>
         <div class="mt-0.5 flex items-center gap-1.5 text-[10px]">
           <span class="num font-semibold text-lime">{topPick.odds.toFixed(2)}</span>
           <span class="text-fog-dim">·</span>
           <span class="num font-semibold text-mint">+{(topPick.edge * 100).toFixed(1)}% edge</span>
         </div>
       {:else}
-        <div class="truncate text-[11.5px] font-medium text-fog">{prediction.recommended.selection}</div>
+        <div class="line-clamp-2 text-[11.5px] font-medium leading-snug text-fog">{prediction.recommended.selection}</div>
         <div class="mt-0.5 text-[10px] text-fog-dim">No value above threshold</div>
       {/if}
     </div>

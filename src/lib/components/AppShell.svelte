@@ -5,9 +5,11 @@
     LayoutDashboard, CalendarDays, Radio, Sparkles, Coins, BrainCircuit, Database,
     ChartNoAxesCombined, WalletCards, NotebookPen, Settings, CreditCard, ShieldCheck,
     Search, Bell, Menu, X, ChevronDown, ArrowUpRight, CircleHelp, LogOut, Plus, Command,
-    Activity, Volleyball, Snowflake, CircleDot, Ticket
+    Activity, Volleyball, Snowflake, CircleDot, Ticket, Home, ToggleLeft, Globe
   } from '@lucide/svelte';
+  import { onMount } from 'svelte';
   import BrandMark from './BrandMark.svelte';
+  import ThemeToggle from './ThemeToggle.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import { DEMO_USER, SUBSCRIPTION_PLANS } from '#lib/data/catalog';
 
@@ -23,14 +25,39 @@
   let drawer = $state(false);
   let userMenu = $state(false);
 
-  const nav = $derived([
+  // Two navigation surfaces: the punter's workspace and the owner console.
+  // Admin-only desks live in the console, not in the public menu.
+  let adminView = $state(false);
+
+  const viewerRole = $derived(String(user?.role ?? DEMO_USER.role));
+  const canAdmin = $derived(['owner', 'super_admin', 'admin'].includes(viewerRole));
+
+  onMount(() => {
+    try {
+      adminView = localStorage.getItem('cb_view') === 'admin';
+    } catch {
+      adminView = false;
+    }
+  });
+
+  function setView(next: boolean) {
+    adminView = next;
+    try {
+      localStorage.setItem('cb_view', next ? 'admin' : 'user');
+    } catch {
+      /* storage can be blocked; the in-memory state still works */
+    }
+    drawer = false;
+  }
+
+  const userNav = $derived([
     {
       label: 'Intelligence',
       items: [
         { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, badge: '' },
         { href: '/fixtures', label: 'Fixtures', icon: CalendarDays, badge: String(fixturesCount) },
-        { href: '/live', label: 'Live now', icon: Radio, badge: liveCount ? String(liveCount) : '', live: true },
-        { href: '/predictions', label: 'Value board', icon: Sparkles, badge: valueCount ? String(valueCount) : '' },
+        { href: '/live', label: 'Live now', icon: Radio, badge: liveCount ? String(liveCount) : '', live: liveCount > 0 },
+        { href: '/predictions', label: 'Value board', icon: Sparkles, badge: '' },
         { href: '/odds', label: 'Odds & markets', icon: Coins, badge: '' }
       ]
     },
@@ -46,30 +73,58 @@
       ]
     },
     {
-      label: 'Models & data',
+      label: 'My workspace',
       items: [
-        { href: '/models', label: 'Model lab', icon: BrainCircuit, badge: '' },
-        { href: '/scrapers', label: 'Data pipeline', icon: Database, badge: '' }
-      ]
-    },
-    {
-      label: 'Workspace',
-      items: [
-        { href: '/paper', label: 'Paper desk', icon: WalletCards, badge: '' },
         { href: '/betslip', label: 'Betslip builder', icon: Ticket, badge: '' },
-        { href: '/analytics', label: 'Performance', icon: ChartNoAxesCombined, badge: '' },
-        { href: '/workspace', label: 'Research notes', icon: NotebookPen, badge: '' }
+        { href: '/paper', label: 'Paper desk', icon: WalletCards, badge: '' }
       ]
     },
     {
       label: 'Account',
       items: [
         { href: '/settings', label: 'Settings', icon: Settings, badge: '' },
-        { href: '/pricing', label: 'Subscription', icon: CreditCard, badge: '' },
-        { href: '/admin', label: 'Admin', icon: ShieldCheck, badge: '' }
+        { href: '/pricing', label: 'Subscription', icon: CreditCard, badge: '' }
+      ]
+    },
+    {
+      label: 'Elsewhere',
+      items: [{ href: '/', label: 'Landing page', icon: Globe, badge: '' }]
+    }
+  ]);
+
+  const consoleNav = $derived([
+    {
+      label: 'Owner console',
+      items: [
+        { href: '/admin', label: 'Console overview', icon: ShieldCheck, badge: '' },
+        { href: '/models', label: 'Model lab', icon: BrainCircuit, badge: '' },
+        { href: '/scrapers', label: 'Data pipeline', icon: Database, badge: '' }
+      ]
+    },
+    {
+      label: 'Research',
+      items: [
+        { href: '/analytics', label: 'Performance', icon: ChartNoAxesCombined, badge: '' },
+        { href: '/workspace', label: 'Research notes', icon: NotebookPen, badge: '' }
+      ]
+    },
+    {
+      label: 'Operations',
+      items: [
+        { href: '/settings', label: 'Settings', icon: Settings, badge: '' },
+        { href: '/pricing', label: 'Subscription', icon: CreditCard, badge: '' }
+      ]
+    },
+    {
+      label: 'Elsewhere',
+      items: [
+        { href: '/dashboard', label: 'User dashboard', icon: LayoutDashboard, badge: '' },
+        { href: '/', label: 'Landing page', icon: Globe, badge: '' }
       ]
     }
   ]);
+
+  const nav = $derived(adminView && canAdmin ? consoleNav : userNav);
 
   const active = (href: string) => {
     const path = page.url.pathname;
@@ -84,21 +139,44 @@
   const viewer = $derived(user ?? DEMO_USER);
   const plan = $derived(viewer.plan);
 
-  const mobileItems = [
-    { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
-    { href: '/fixtures', label: 'Fixtures', icon: CalendarDays },
-    { href: '/live', label: 'Live', icon: Radio },
-    { href: '/predictions', label: 'Value', icon: Sparkles },
-    { href: '/analytics', label: 'Stats', icon: ChartNoAxesCombined }
-  ];
+  const mobileItems = $derived(
+    adminView && canAdmin
+      ? [
+          { href: '/admin', label: 'Console', icon: ShieldCheck },
+          { href: '/models', label: 'Models', icon: BrainCircuit },
+          { href: '/scrapers', label: 'Pipeline', icon: Database },
+          { href: '/analytics', label: 'Stats', icon: ChartNoAxesCombined }
+        ]
+      : [
+          { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
+          { href: '/fixtures', label: 'Fixtures', icon: CalendarDays },
+          { href: '/live', label: 'Live', icon: Radio },
+          { href: '/predictions', label: 'Value', icon: Sparkles },
+          { href: '/betslip', label: 'Betslip', icon: Ticket }
+        ]
+  );
 </script>
 
 <div class="min-h-screen">
   <!-- Desktop sidebar -->
   <aside class="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r border-white/[0.07] bg-pitch-950/80 backdrop-blur-xl lg:flex">
-    <div class="flex h-16 shrink-0 items-center px-5">
+    <div class="flex h-16 shrink-0 items-center justify-between px-5">
       <a href="/dashboard" aria-label="CaveBettor command centre"><BrandMark size={34} withWordmark /></a>
+      <a href="/" class="btn-icon !h-7 !w-7" aria-label="Open the public landing page" title="Landing page"><Globe size={13} /></a>
     </div>
+
+    {#if canAdmin}
+      <button
+        onclick={() => setView(!adminView)}
+        class={`mx-3 mb-2 flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-semibold transition ${adminView ? 'border-rose/30 bg-rose/[0.08] text-rose' : 'border-lime/25 bg-lime/[0.06] text-lime'}`}
+      >
+        <span class="flex items-center gap-1.5">
+          <ToggleLeft size={13} />
+          {adminView ? 'Admin console' : 'User view'}
+        </span>
+        <span class="rounded-md bg-black/25 px-1.5 py-0.5 text-[9px] uppercase tracking-wide">{adminView ? 'switch to user' : 'switch to admin'}</span>
+      </button>
+    {/if}
 
     <div class="mx-3 mb-3 rounded-xl border border-white/[0.07] bg-white/[0.025] p-2.5">
       <button class="flex w-full items-center justify-between gap-2 text-left" onclick={() => (userMenu = !userMenu)}>
@@ -127,7 +205,7 @@
             >
               <item.icon size={15} strokeWidth={active(item.href) ? 2.2 : 1.8} class={active(item.href) ? 'text-lime' : 'text-fog-dim group-hover:text-white/80'} />
               <span class="flex-1 truncate">{item.label}</span>
-              {#if item.live && liveCount > 0}
+              {#if (item as { live?: boolean }).live && liveCount > 0}
                 <span class="flex items-center gap-1 rounded-full bg-mint/12 px-1.5 py-0.5 text-[9px] font-bold text-mint">
                   <span class="live-dot h-1 w-1 rounded-full bg-mint"></span>{item.badge}
                 </span>
@@ -170,6 +248,25 @@
           <BrandMark size={30} withWordmark />
           <button class="btn-icon" onclick={() => (drawer = false)} aria-label="Close menu"><X size={16} /></button>
         </div>
+
+        <a
+          href="/"
+          onclick={() => (drawer = false)}
+          class="mx-3 mb-2 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[12.5px] font-semibold text-white/80"
+        >
+          <Home size={15} class="text-fog-dim" /> Landing page
+          <ArrowUpRight size={12} class="ml-auto text-fog-dim" />
+        </a>
+
+        {#if canAdmin}
+          <button
+            onclick={() => setView(!adminView)}
+            class={`mx-3 mb-2 flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-[12px] font-semibold ${adminView ? 'border-rose/30 bg-rose/[0.08] text-rose' : 'border-lime/25 bg-lime/[0.06] text-lime'}`}
+          >
+            <span class="flex items-center gap-1.5"><ToggleLeft size={14} /> {adminView ? 'Admin console' : 'User view'}</span>
+            <span class="text-[9.5px] uppercase tracking-wide">{adminView ? 'to user' : 'to admin'}</span>
+          </button>
+        {/if}
         <nav class="flex-1 overflow-y-auto px-3 pb-6">
           {#each nav as group}
             <div class="mb-4">
@@ -230,6 +327,18 @@
           <span class="text-lime">₦</span> NGN
         </div>
 
+        {#if canAdmin}
+          <button
+            onclick={() => setView(!adminView)}
+            class={`btn-icon shrink-0 ${adminView ? '!border-rose/30 !text-rose' : '!border-lime/25 !text-lime'}`}
+            aria-label={adminView ? 'Switch to user view' : 'Switch to the admin console'}
+            title={adminView ? 'Switch to user view' : 'Switch to the admin console'}
+          >
+            <ToggleLeft size={15} />
+          </button>
+        {/if}
+
+        <ThemeToggle compact />
         <button class="btn-icon relative shrink-0" aria-label="Notifications">
           <Bell size={15} />
           <span class="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-lime"></span>

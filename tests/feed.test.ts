@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { deleteCache, writeCache } from '#lib/server/cache';
-import { readProviderFixtures } from '#lib/server/feed';
+import { readProviderFixtures, resetFeedMemo } from '#lib/server/feed';
 
 const FEED_KEY = 'feed/fixtures';
 const LIVE_KEY = 'feed/live';
@@ -30,6 +30,8 @@ describe('provider feed read model', () => {
   beforeEach(async () => {
     await deleteCache(FEED_KEY);
     await deleteCache(LIVE_KEY);
+    await deleteCache('feed/results');
+    resetFeedMemo();
   });
 
   it('returns an empty list instead of a poisoned payload', async () => {

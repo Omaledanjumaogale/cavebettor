@@ -54,8 +54,10 @@ export function countdown(iso: string): string {
 }
 
 export function initials(name: string): string {
-  return name
-    .split(/\s+/)
+  const words = name.split(/\s+/).filter(Boolean);
+  // One-word clubs get three letters: a lone "N" badge reads as a placeholder.
+  if (words.length === 1) return (words[0] ?? '').slice(0, 3).toUpperCase();
+  return words
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('');

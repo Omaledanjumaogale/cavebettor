@@ -652,8 +652,17 @@ function buildInsights(fixture: Fixture, core: CoreModel, markets: Market[], con
   return insights;
 }
 
+/**
+ * Every priced selection the model actually likes, ranked by how likely it is
+ * to land rather than by how big the price is.
+ *
+ * The punter's edge comes from strike rate the bookmaker has mispriced, so a
+ * 78% over 1.5 that pays 1.42 outranks a 9% correct score at 14.0. Duplicate
+ * rows (the same selection reachable through two ladders) are collapsed.
+ */
 function buildValueBets(markets: Market[], bankroll = PAPER_BANKROLL_NGN): ValueBet[] {
-  return markets
+  const seen = new Set<string>();
+  const candidates = markets
     .flatMap((m) =>
       m.outcomes.map((o) => ({
         market: m.label,
@@ -671,15 +680,281 @@ function buildValueBets(markets: Market[], bankroll = PAPER_BANKROLL_NGN): Value
         bookmaker: o.bestBook
       }))
     )
-    .filter((v) => v.edge >= 0.025 && v.odds >= 1.3 && v.odds <= 12 && v.modelProbability >= 0.15)
-    .sort((a, b) => b.edge * b.confidence - a.edge * a.confidence)
-    .slice(0, 8)
+    // A selection the model thinks is underpriced AND likely enough to settle.
+    .filter((v) => v.edge >= 0.02 && v.odds >= 1.25 && v.modelProbability >= 0.35)
+    .filter((v) => {
+      const key = `${v.selection}|${Math.round(v.modelProbability * 1000)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  return candidates
+    .sort((a, b) => b.modelProbability - a.modelProbability || b.edge - a.edge)
+    .slice(0, 12)
     .map((v) => ({ ...v, stakeNgn: Math.max(1000, Math.min(50_000, v.stakeNgn)) }));
+}
+
+/**
+ * Punter-facing selection model.
+ *
+ * A staked bet needs both a real chance of landing and a price worth taking, so
+ * the board is built in this order:
+ *
+ *   1. Only positive-EV outcomes are eligible.
+ *   2. Team names are written out in full - no abbreviations on a bet slip.
+ *   3. One line per direction: the best "Over" line and the best "Under" line,
+ *      chosen by strike rate, never an arbitrary baseline. Over 154.5 and under
+ *      190 can both win, so both may stand; over 200 with under 180 cannot, so
+ *      only the stronger one survives.
+ *   4. A marginal favourite is not a "straight win" bet. When the straight
+ *      price is not dominant, the covering markets (double chance, Asian
+ *      handicap, handicap/spread, draw no bet) are preferred because they are
+ *      the ones that actually win.
+ *   5. Everything is ranked by model probability, then edge.
+ */
+
+/** Matches "match under 2.5", "1st half over 0.5", "Feyenoord over 1.5", "under 89.5". */
+const TOTALS_DIRECTION = /\b(over|under)\s+([0-9]+(?:\.[0-9]+)?)/i;
+
+interface Candidate {
+  marketId: string;
+  marketGroup: string;
+  market: string;
+  selection: string;
+  outcomeId?: string;
+  odds: number;
+  modelProbability: number;
+  edge: number;
+  confidence: number;
+  bookmaker: string;
+  stakeNgn: number;
+  line?: number;
+  scope?: string;
+  direction?: 'over' | 'under';
+}
+
+function fullName(selection: string, home: string, away: string, hs: string, as: string): string {
+  // Only expand genuine short codes. A one-letter abbreviation would corrupt
+  // every word containing that letter ("Draw" -> "Diriangenraw").
+  let out = selection;
+  if (hs.length >= 2 && hs !== home) out = out.split(hs).join(home);
+  if (as.length >= 2 && as !== away) out = out.split(as).join(away);
+  return out;
+}
+
+function periodKey(marketId: string): string {
+  if (/^(ht|h1)/i.test(marketId)) return 'first-half';
+  // Hockey periods and basketball quarters share one bucket: the board should
+  // not fill half its slots with correlated period unders.
+  if (/^(p[0-9]|q[0-9])/i.test(marketId)) return 'period';
+  if (/^(f5)/i.test(marketId)) return 'first-five';
+  if (/^(set1)/i.test(marketId)) return 'first-set';
+  return 'full';
+}
+
+function scoreOf(row: Candidate): number {
+  return row.modelProbability * 1000 + row.edge * 100;
+}
+
+/** "1st half", "first half" and "h1" must collapse to one scope. */
+const SCOPE_ALIASES: Array<[RegExp, string]> = [
+  [/^(1st|first)\s+half/i, 'first half'],
+  [/^(1st|first)\s+period/i, 'first period'],
+  [/^(1st|first)\s+quarter/i, 'first quarter'],
+  [/^(1st|first)\s+set/i, 'first set'],
+  [/^(first|1st)\s+(5|five)\s+innings/i, 'first five innings']
+];
+
+/** Split a totals label into its scope ("Feyenoord", "1st half", "match") and line. */
+function readTotals(row: Candidate): { scope: string; direction: 'over' | 'under'; line: number } | null {
+  const match = TOTALS_DIRECTION.exec(row.selection);
+  if (!match) return null;
+  const raw = row.selection.slice(0, match.index).trim() || 'match';
+  let scope = raw.toLowerCase();
+  for (const [pattern, canonical] of SCOPE_ALIASES) {
+    if (pattern.test(raw)) {
+      scope = canonical;
+      break;
+    }
+  }
+  return { scope, direction: match[1].toLowerCase() as 'over' | 'under', line: Number(match[2]) };
+}
+
+function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[] {
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
+
+  const all: Candidate[] = markets.flatMap((market) =>
+    market.outcomes.map((outcome) => ({
+      marketId: market.id,
+      marketGroup: market.group,
+      market: fullName(market.label, home.name, away.name, home.shortName, away.shortName),
+      selection: fullName(outcome.label, home.name, away.name, home.shortName, away.shortName),
+      outcomeId: outcome.id,
+      odds: outcome.bookOdds,
+      modelProbability: outcome.modelProbability,
+      edge: outcome.edge,
+      confidence: outcome.confidence,
+      bookmaker: outcome.bestBook,
+      stakeNgn: Math.round((PAPER_BANKROLL_NGN * outcome.kelly) / 100) * 100
+    }))
+  );
+
+  // Two tiers, both ranked by how likely the bet is to settle:
+  //   value  — a real edge over the price (the preferred tier);
+  //   safety — a fair-or-better price on a high strike rate. A 90% shot at a
+  //            fair 1.14 is a better bet to win than a 49% shot at 2.10, and
+  //            the board must say so instead of hiding behind a price floor.
+  const valueRows = all.filter((row) => row.edge >= 0.02 && row.odds >= 1.2 && row.odds <= 6);
+  const seenRow = new Set(valueRows.map((row) => `${row.marketId}|${row.selection}`));
+  const safetyRows = all.filter(
+    (row) =>
+      row.modelProbability >= 0.55 &&
+      row.edge >= -0.01 &&
+      row.odds >= 1.05 &&
+      !seenRow.has(`${row.marketId}|${row.selection}`)
+  );
+  const eligible = [...valueRows, ...safetyRows];
+  if (!eligible.length) return [];
+
+  // ── totals: best line per scope and direction, then compatibility ────────
+  const totalsByKey = new Map<string, Candidate>();
+  const others: Candidate[] = [];
+
+  for (const row of eligible) {
+    const totals = readTotals(row);
+    if (!totals) {
+      others.push(row);
+      continue;
+    }
+    const key = `${totals.scope}|${totals.direction}`;
+    const candidate: Candidate = { ...row, ...totals };
+    const incumbent = totalsByKey.get(key);
+    if (!incumbent || scoreOf(candidate) > scoreOf(incumbent)) totalsByKey.set(key, candidate);
+  }
+
+  let totals = [...totalsByKey.values()];
+
+  // Over X and under Y coexist only when Y > X (a 154.5 over and a 190 under
+  // can both land; a 200 over and an 180 under cannot).
+  const scopes = new Set(totals.map((row) => row.scope ?? 'match'));
+  for (const scope of scopes) {
+    const over = totals.find((row) => row.scope === scope && row.direction === 'over');
+    const under = totals.find((row) => row.scope === scope && row.direction === 'under');
+    if (over && under && (under.line ?? 0) <= (over.line ?? 0)) {
+      const drop = scoreOf(over) >= scoreOf(under) ? under : over;
+      totals = totals.filter((row) => row !== drop);
+    }
+  }
+
+  // ── straight win versus the cover that actually settles ─────────────────
+  const straight = others.find((row) => row.marketId === '1x2' || row.marketId === 'ml');
+  const covers = others.filter((row) => row.marketId === 'dc' || row.marketId === 'dnb');
+  const handicaps = others.filter((row) => /^(ah|spread|puck|runline|sethcp)/.test(row.marketId));
+  const keep: Candidate[] = [];
+
+  if (straight) {
+    const weak = straight.modelProbability < 0.62;
+    const better = [...covers, ...handicaps].sort((a, b) => scoreOf(b) - scoreOf(a))[0];
+    if (weak && better && better.modelProbability > straight.modelProbability) keep.push(better);
+    else keep.push(straight);
+  }
+
+  const usedFamilies = new Set<string>();
+  for (const row of [...covers, ...handicaps]) {
+    if (keep.some((k) => k.marketId === row.marketId && k.selection === row.selection)) continue;
+    const family = /^(ah|spread|puck|runline|sethcp)/.test(row.marketId) ? 'handicap' : 'cover';
+    const key = `${family}|${periodKey(row.marketId)}`;
+    if (usedFamilies.has(key)) continue;
+    usedFamilies.add(key);
+    keep.push(row);
+  }
+
+  for (const row of others) {
+    if (keep.includes(row) || row === straight) continue;
+    // Exact scores and set scores are lottery tickets, not recommendations.
+    if (row.marketId === 'cs' || row.marketId === 'totalexact' || row.marketId === 'sets' || row.marketId === 'margin' || row.marketId === 'totalband') continue;
+    if (/^(ah|spread|puck|runline|sethcp)/.test(row.marketId)) continue;
+    const key = `${row.marketId}|${periodKey(row.marketId)}`;
+    if (usedFamilies.has(key)) continue;
+    usedFamilies.add(key);
+    keep.push(row);
+  }
+
+  const merged = [...keep, ...totals];
+  const seen = new Set<string>();
+  const unique = merged.filter((row) => {
+    const key = `${row.marketId}|${row.selection}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Correlated legs: never fill the board with three period unders.
+  const perPeriod = new Map<string, number>();
+  const balanced = unique
+    .sort((a, b) => b.modelProbability - a.modelProbability || b.edge - a.edge)
+    .filter((row) => {
+      const key = periodKey(row.marketId);
+      const count = perPeriod.get(key) ?? 0;
+      if (count >= 2) return false;
+      perPeriod.set(key, count + 1);
+      return true;
+    });
+
+  return balanced.slice(0, 10);
+}
+
+function buildRecommendations(valueBets: ValueBet[], markets: Market[], fixture: Fixture): Recommendation[] {
+  const selected = selectRecommendations(markets, fixture);
+
+  if (selected.length) {
+    const counts = new Map<string, number>();
+    for (const row of selected) counts.set(row.selection, (counts.get(row.selection) ?? 0) + 1);
+
+    return selected.map((row, index) => ({
+      // "Iga Swiatek" wins the match and the first set; the bet slip must say which.
+      selection: (counts.get(row.selection) ?? 0) > 1 ? `${row.selection} (${row.market})` : row.selection,
+      market: row.market,
+      marketId: row.marketId,
+      outcomeId: row.outcomeId,
+      odds: row.odds,
+      modelProbability: row.modelProbability,
+      stakeNgn: Math.max(1000, Math.min(50_000, row.stakeNgn)),
+      confidence: row.confidence,
+      rationale:
+        `${(row.modelProbability * 100).toFixed(1)}% model strike rate against ${row.odds.toFixed(2)} at ${row.bookmaker} - ` +
+        `${(row.edge * 100).toFixed(1)}% above the implied price.` +
+        (index === 0 ? ' Highest-confidence call on this fixture.' : ''),
+      risk: (row.modelProbability > 0.65 ? 'low' : row.modelProbability > 0.45 ? 'medium' : 'high') as 'low' | 'medium' | 'high'
+    }));
+  }
+
+  const core = markets.find((m) => m.id === '1x2' || m.id === 'ml');
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
+  const fallback = core?.outcomes.reduce((a, b) => (b.modelProbability > a.modelProbability ? b : a));
+  const label = (value: string) => fullName(value, home.name, away.name, home.shortName, away.shortName);
+  return [
+    {
+      selection: fallback ? label(fallback.label) : 'No bet',
+      market: core ? label(core.label) : 'Match result',
+      marketId: core?.id,
+      outcomeId: fallback?.id,
+      odds: fallback?.bookOdds ?? 2,
+      modelProbability: fallback?.modelProbability ?? 0.5,
+      stakeNgn: 0,
+      confidence: fallback?.confidence ?? 60,
+      rationale: 'No selection clears both the strike-rate and value thresholds. The model passes on this fixture - the most likely result is shown for reference only.',
+      risk: 'medium'
+    }
+  ];
 }
 
 function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: Fixture): Recommendation {
   const core = markets.find((m) => m.id === '1x2' || m.id === 'ml');
-  const best = valueBets[0];
+  const best = valueBets.slice().sort((a, b) => b.modelProbability - a.modelProbability || b.edge - a.edge)[0];
   const home = homeTeam(fixture);
   const away = awayTeam(fixture);
 
@@ -693,7 +968,7 @@ function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: 
       modelProbability: best.modelProbability,
       stakeNgn: best.stakeNgn,
       confidence: best.confidence,
-      rationale: `Best risk-adjusted edge on the board: ${(best.edge * 100).toFixed(1)}% over the implied price at ${best.bookmaker}. Quarter-Kelly sizing on a ₦1.25m paper bankroll.`,
+      rationale: `Highest-confidence call: ${(best.modelProbability * 100).toFixed(1)}% model strike rate at ${best.odds.toFixed(2)} with ${best.bookmaker}, ${(best.edge * 100).toFixed(1)}% above the implied price. Quarter-Kelly sizing on a ₦1.25m paper bankroll.`,
       risk: best.modelProbability > 0.6 ? 'low' : best.modelProbability > 0.4 ? 'medium' : 'high'
     };
   }
@@ -778,8 +1053,9 @@ export function buildPrediction(fixture: Fixture): Prediction {
   const entropy = -probs.reduce((a, p) => a + p * Math.log(p), 0) / Math.log(Math.max(2, probs.length));
   const topEdge = Math.max(0, ...markets.flatMap((m) => m.outcomes.map((o) => o.edge)));
   const confidence = Math.round(clamp(58 + (1 - entropy) * 24 + dataQuality * 8 + Math.min(10, topEdge * 120), 45, 96));
-  const valueBets = buildValueBets(markets);
-  const recommendation = buildRecommendation(valueBets, markets, fixture);
+  const recommendations = buildRecommendations([], markets, fixture);
+  const valueBets = valueBetsFromRecommendations(recommendations, markets);
+  const recommendation = recommendations[0] ?? buildRecommendation(valueBets, markets, fixture);
   const insights = buildInsights(fixture, core, markets, confidence);
   const profile = sportProfile(fixture.sport);
 
@@ -823,6 +1099,7 @@ export function buildPrediction(fixture: Fixture): Prediction {
     edge: round(topEdge, 4),
     valueBets,
     recommended: recommendation,
+    recommendations,
     insights,
     expectedPoints: core.expected,
     spread: core.spread,
@@ -844,4 +1121,35 @@ export function getPrediction(fixture: Fixture): Prediction {
 
 export function modelById(id: string) {
   return MODELS.find((m) => m.id === id);
+}
+
+/**
+ * Turn the ranked recommendations into the value-bet rows used by the tables,
+ * so the table and the board always describe the same selections.
+ */
+function valueBetsFromRecommendations(recommendations: Recommendation[], markets: Market[]): ValueBet[] {
+  const index = new Map<string, Market>();
+  for (const market of markets) index.set(market.id, market);
+
+  return recommendations
+    .map((rec) => {
+      const market = rec.marketId ? index.get(rec.marketId) : undefined;
+      const outcome = market?.outcomes.find((o) => o.label === rec.selection || o.id === rec.outcomeId);
+      return {
+        market: rec.market,
+        marketId: rec.marketId ?? '',
+        marketGroup: market?.group,
+        outcomeId: rec.outcomeId,
+        selection: rec.selection,
+        odds: rec.odds,
+        modelProbability: rec.modelProbability,
+        impliedProbability: 1 / rec.odds,
+        edge: outcome?.edge ?? rec.modelProbability * rec.odds - 1,
+        kellyStake: outcome?.kelly ?? 0,
+        stakeNgn: rec.stakeNgn,
+        confidence: rec.confidence,
+        bookmaker: outcome?.bestBook ?? ''
+      } satisfies ValueBet;
+    })
+    .filter((bet) => bet.marketId);
 }

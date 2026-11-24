@@ -7,11 +7,28 @@ import { liveCards, readSnapshot } from '#lib/server/live';
 import { pageFixtureUniverse } from '#lib/server/feed';
 import type { PageServerLoad } from './$types';
 
+/** Hard ceiling on fixtures priced per request (CPU + latency guard). */
+const BOARD_SCAN_LIMIT = 32;
+
+/** The board changes slowly; keep one copy per isolate so repeat views are instant. */
+const BOARD_MEMO_MS = 90_000;
+const boardMemo = new Map<string, { at: number; payload: any }>();
+
 export const load: PageServerLoad = async ({ url }) => {
   const sport = url.searchParams.get('sport') ?? 'all';
   const sort = url.searchParams.get('sort') ?? 'edge';
+  const memoKey = `${sport}|${sort}`;
+  const memo = boardMemo.get(memoKey);
+  if (memo && Date.now() - memo.at < BOARD_MEMO_MS) return memo.payload;
   const [universe, cards, board] = await Promise.all([pageFixtureUniverse(), liveCards(), readSnapshot<any[]>('board')]);
-  const fixtures = universe.fixtures;
+  const now = Date.now();
+  // Only the next slate is priced: computing every fixture in a 1,300-row
+  // window would exceed the Worker CPU budget and return 5xx pages.
+  const horizon = now + 3 * 86_400_000;
+  const fixtures = universe.fixtures
+    .filter((fixture) => fixture.status !== 'finished' && +new Date(fixture.kickoff) <= horizon)
+    .sort((a, b) => +new Date(a.kickoff) - +new Date(b.kickoff))
+    .slice(0, BOARD_SCAN_LIMIT);
   const cardFor = (fixture: (typeof fixtures)[number]) => cards?.[fixture.id] ?? cardOf(getPrediction(fixture));
 
   // Only trust cached board rows that still exist in the current fixture
@@ -92,7 +109,7 @@ export const load: PageServerLoad = async ({ url }) => {
       : 0
   }));
 
-  return {
+  const payload = {
     filters: { sport, sort },
     bets: sorted.slice(0, 80),
     total: bets.length,
@@ -119,4 +136,8 @@ export const load: PageServerLoad = async ({ url }) => {
         pick: cardFor(f).recommended
       }))
   };
+
+  boardMemo.set(memoKey, { at: Date.now(), payload });
+  if (boardMemo.size > 12) boardMemo.delete(boardMemo.keys().next().value as string);
+  return payload;
 };

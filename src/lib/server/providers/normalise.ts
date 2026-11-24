@@ -209,13 +209,11 @@ function progressOf(raw: ApiFootballFixture, sport: ApiFootballSport, status: Fi
 }
 
 function shortNameOf(name: string): string {
-  const short = name
-    .split(/[\s-]+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 3);
-  return (short || name.slice(0, 3)).toUpperCase();
+  const words = name.split(/[\s-]+/).filter(Boolean);
+  const initials = words.map((part) => part[0]).join('');
+  // Three letters read better than a single initial for one-word clubs.
+  if (words.length === 1) return name.slice(0, 3).toUpperCase();
+  return initials.slice(0, 4).toUpperCase() || name.slice(0, 3).toUpperCase();
 }
 
 function inferredTeam(id: string, name: string, leagueId: string, sport: SportId, logo: string): Team {

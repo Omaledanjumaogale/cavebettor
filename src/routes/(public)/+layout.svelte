@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte';
   import { Menu, X, ArrowRight } from '@lucide/svelte';
   import BrandMark from '#lib/components/BrandMark.svelte';
+  import ThemeToggle from '#lib/components/ThemeToggle.svelte';
 
   let { children }: { children: Snippet } = $props();
   let menuOpen = $state(false);
@@ -27,12 +28,15 @@
       </nav>
 
       <div class="hidden items-center gap-2.5 md:flex">
+        <ThemeToggle />
         <a href="/auth/login" class="btn btn-ghost !py-2 text-[11.5px]">Sign in</a>
         <a href="/auth/register" class="btn btn-primary !py-2 text-[11.5px]">
           Start free <ArrowRight size={13} />
         </a>
       </div>
 
+      <div class="flex items-center gap-2 md:hidden">
+      <ThemeToggle />
       <button
         type="button"
         class="btn btn-ghost !px-2 !py-1.5 md:hidden"
@@ -42,6 +46,7 @@
       >
         {#if menuOpen}<X size={18} />{:else}<Menu size={18} />{/if}
       </button>
+      </div>
     </div>
 
     {#if menuOpen}

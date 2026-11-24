@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { ArrowLeft, ArrowUpRight, Sparkles, Bot, ShieldAlert, TrendingUp, MapPin, CloudSun, Users, BarChart3, Layers, GitCompareArrows, Star, Copy, Check, LoaderCircle, ChevronRight, Info, Target, Radio } from '@lucide/svelte';
   import TeamBadge from '#lib/components/TeamBadge.svelte';
+  import TeamNameLink from '#lib/components/TeamNameLink.svelte';
   import ProbabilityBar from '#lib/components/ProbabilityBar.svelte';
   import Heatmap from '#lib/components/Heatmap.svelte';
   import LineChart from '#lib/components/LineChart.svelte';
@@ -34,6 +35,13 @@
   const main = $derived(prediction.markets.find((m: any) => m.id === '1x2' || m.id === 'ml'));
   const bestEdge = $derived([...prediction.markets.flatMap((m: any) => m.outcomes.map((o: any) => ({ ...o, market: m.label })))].sort((a: any, b: any) => b.edge - a.edge));
   const valueBets = $derived(prediction.valueBets);
+  const rankedSelections = $derived(
+    (prediction.recommendations ?? prediction.valueBets ?? [])
+      .slice()
+      .sort((a: any, b: any) => b.modelProbability - a.modelProbability || b.edge - a.edge)
+      .slice(0, 10)
+      .map((row: any) => ({ ...row, bestBook: row.bestBook ?? row.bookmaker }))
+  );
   const topScores = $derived(prediction.topScorelines);
   const marketGroups = $derived(Array.from(new Set(prediction.markets.map((m: any) => m.group))));
   const shownMarkets = $derived(marketFilter === 'all' ? prediction.markets : prediction.markets.filter((m: any) => m.group === marketFilter));
@@ -98,7 +106,9 @@
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <span class="h-5 w-1.5 rounded-full" style={`background:${league.colour}`}></span>
-          <span class="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-fog">{league.name} · {fixture.round}</span>
+          <span class="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-fog">
+            {league.name}{#if league.country} · {league.country}{/if}{#if fixture.round} · {fixture.round}{/if}
+          </span>
           {#if live}
             <span class="chip chip-mint"><span class="live-dot h-1.5 w-1.5 rounded-full bg-mint"></span>{fixture.period} · {fixture.minute}′</span>
           {:else if finished}
@@ -116,7 +126,7 @@
       <div class="mt-5 grid items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
         <div class="flex items-center gap-3 sm:justify-end">
           <div class="order-2 min-w-0 text-left sm:order-1 sm:text-right">
-            <a href={`/fixtures?q=${encodeURIComponent(home.name)}`} class="display block truncate text-[15px] font-bold text-white hover:text-lime sm:text-[22px]">{home.name}</a>
+            <span class="display block truncate text-[15px] font-bold text-white sm:text-[22px]"><TeamNameLink team={home} size="lg" class="justify-end" /></span>
             <div class="mt-1 flex items-center gap-2 sm:justify-end">
               <FormPills form={home.form} size="xs" />
               <span class="text-[9.5px] text-fog-dim">Elo {home.elo}</span>
@@ -130,15 +140,18 @@
             <div class="display num text-[28px] font-bold leading-none text-white sm:text-[36px]">{fixture.score.home}<span class="mx-1.5 text-fog-dim">–</span>{fixture.score.away}</div>
             <div class="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-fog-dim">{live ? `${fixture.period} · ${fixture.minute}′` : 'Final score'}</div>
           {:else}
-            <div class="num text-[19px] font-bold text-white">{formatKickoff(fixture.kickoff).split(',')[1] ?? formatKickoff(fixture.kickoff)}</div>
-            <div class="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-fog-dim">Kick-off · WAT</div>
+            <div class="num text-[19px] font-bold text-white">{new Date(fixture.kickoff).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
+            <div class="mt-1 text-center text-[9.5px] font-semibold uppercase tracking-[0.12em] text-fog-dim">
+              {new Date(fixture.kickoff).toLocaleDateString('en-NG', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+            </div>
+            <div class="mt-0.5 text-center text-[9px] uppercase tracking-[0.12em] text-fog-dim">Kick-off · WAT</div>
           {/if}
         </div>
 
         <div class="flex items-center gap-3">
           <div class="shrink-0"><span class="block sm:hidden"><TeamBadge team={away} size={40} /></span><span class="hidden sm:block"><TeamBadge team={away} size={54} /></span></div>
           <div class="min-w-0">
-            <a href={`/fixtures?q=${encodeURIComponent(away.name)}`} class="display block truncate text-[15px] font-bold text-white hover:text-lime sm:text-[22px]">{away.name}</a>
+            <span class="display block truncate text-[15px] font-bold text-white sm:text-[22px]"><TeamNameLink team={away} size="lg" /></span>
             <div class="mt-1 flex items-center gap-2">
               <FormPills form={away.form} size="xs" />
               <span class="text-[9.5px] text-fog-dim">Elo {away.elo}</span>
@@ -220,6 +233,41 @@
               </div>
               <span class={`chip ${prediction.recommended.risk === 'low' ? 'chip-mint' : prediction.recommended.risk === 'medium' ? 'chip-amber' : 'chip-rose'}`}>{prediction.recommended.risk} risk</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Ranked model selections: highest strike rate first -->
+        <div class="panel overflow-hidden">
+          <div class="flex flex-wrap items-center justify-between gap-2 px-4 pb-1 pt-4">
+            <div>
+              <h3 class="text-[13px] font-semibold text-white">Ranked model selections</h3>
+              <p class="text-[10.5px] text-fog-dim">Every positive selection across the markets, ordered by model strike rate — not by price</p>
+            </div>
+            <span class="chip chip-lime !text-[9.5px]">{rankedSelections.length} qualifying</span>
+          </div>
+          <div class="divide-y divide-white/[0.05]">
+            {#each rankedSelections as row, index (row.marketId + row.selection)}
+              <div class="flex items-start gap-2.5 px-4 py-2.5">
+                <span class="num mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-[10px] font-bold text-fog">{index + 1}</span>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span class="truncate text-[12px] font-semibold text-white">{row.selection}</span>
+                    <span class="chip !px-1.5 !py-0 !text-[9px] capitalize">{row.marketGroup ?? 'market'}</span>
+                  </div>
+                  <div class="truncate text-[10px] text-fog-dim">{row.market}</div>
+                </div>
+                <div class="shrink-0 text-right">
+                  <div class="num text-[12.5px] font-bold text-lime">{(row.modelProbability * 100).toFixed(1)}%</div>
+                  <div class="num text-[9.5px] text-fog-dim">{row.odds.toFixed(2)} · +{(row.edge * 100).toFixed(1)}%</div>
+                </div>
+                <div class="hidden shrink-0 text-right sm:block">
+                  <div class="num text-[10.5px] text-white">{row.confidence}% conf.</div>
+                  <div class="text-[9px] text-fog-dim">{row.bestBook ?? ''}</div>
+                </div>
+              </div>
+            {:else}
+              <p class="px-4 py-6 text-center text-[11.5px] text-fog">The model has no selection clearing its strike-rate and value thresholds for this fixture. Passing is the disciplined call.</p>
+            {/each}
           </div>
         </div>
 

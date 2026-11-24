@@ -90,10 +90,45 @@ describe('prediction engine', () => {
     }
   });
 
-  it('only surfaces value bets above the 2.5% threshold', () => {
+  it('ranks selections by strike rate, not by price', () => {
+    const board = prediction.recommendations;
+    expect(board.length).toBeGreaterThan(0);
+    for (let i = 1; i < board.length; i++) {
+      expect(board[i - 1].modelProbability).toBeGreaterThanOrEqual(board[i].modelProbability);
+    }
+    // Nothing on the board is a lottery ticket or a sub-1.05 stake.
+    for (const rec of board) {
+      expect(rec.odds).toBeGreaterThanOrEqual(1.05);
+      expect(rec.odds).toBeLessThanOrEqual(9.5);
+    }
+  });
+
+  it('never offers contradictory totals on the same board', () => {
+    const totals = prediction.recommendations
+      .map((rec) => /(over|under)\s+([0-9]+(?:\.[0-9]+)?)/i.exec(rec.selection))
+      .filter((m): m is RegExpExecArray => Boolean(m))
+      .map((m) => ({ direction: m[1].toLowerCase(), line: Number(m[2]) }));
+    const over = totals.filter((t) => t.direction === 'over').sort((a, b) => a.line - b.line)[0];
+    const under = totals.filter((t) => t.direction === 'under').sort((a, b) => b.line - a.line)[0];
+    if (over && under) expect(under.line).toBeGreaterThan(over.line);
+  });
+
+  it('keeps one line per totals direction per scope', () => {
+    const keys = new Set<string>();
+    for (const rec of prediction.recommendations) {
+      const match = /^(.*?)(over|under)\s+[0-9]/i.exec(rec.selection);
+      if (!match) continue;
+      const key = `${match[1].trim().toLowerCase()}|${match[2].toLowerCase()}`;
+      expect(keys.has(key)).toBe(false);
+      keys.add(key);
+    }
+  });
+
+  it('keeps the value table consistent with the ranked board', () => {
     for (const bet of prediction.valueBets) {
-      expect(bet.edge).toBeGreaterThanOrEqual(0.025);
-      expect(bet.odds).toBeGreaterThanOrEqual(1.3);
+      expect(bet.odds).toBeGreaterThanOrEqual(1.05);
+      expect(bet.modelProbability).toBeGreaterThanOrEqual(0.3);
+      expect(prediction.recommendations.some((rec) => rec.selection === bet.selection)).toBe(true);
     }
   });
 
