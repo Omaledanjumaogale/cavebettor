@@ -15,3 +15,4 @@ research/
 
 # generated at build time
 static/build-info.json
+.probe/
