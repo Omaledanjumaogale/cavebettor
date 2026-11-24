@@ -1,20 +1,20 @@
 <script lang="ts">
-  import { LEAGUE_MAP, TEAM_MAP } from '#lib/data/catalog';
+  import { awayTeam, fixtureLeague, homeTeam } from '#lib/data/registry';
   import type { Fixture } from '#lib/types';
   import type { PredictionCard } from '#lib/snapshot';
   import { formatKickoff } from '#lib/format';
   import TeamBadge from './TeamBadge.svelte';
 
   let { fixture, prediction }: { fixture: Fixture; prediction: PredictionCard } = $props();
-  const league = $derived(LEAGUE_MAP[fixture.leagueId]);
-  const home = $derived(TEAM_MAP[fixture.homeId]);
-  const away = $derived(TEAM_MAP[fixture.awayId]);
+  const league = $derived(fixtureLeague(fixture));
+  const home = $derived(homeTeam(fixture));
+  const away = $derived(awayTeam(fixture));
   const live = $derived(fixture.status === 'live' || fixture.status === 'halftime');
   const finished = $derived(fixture.status === 'finished');
   const pick = $derived(prediction.valueBets[0]);
 </script>
 
-<a href={`/fixtures/${fixture.id}`} class="group grid grid-cols-[64px_1fr_auto] items-center gap-3 border-b border-white/[0.045] px-3 py-3 transition hover:bg-white/[0.03] sm:grid-cols-[84px_1fr_190px_auto]">
+<a href={`/fixtures/${fixture.id}`} class="group grid grid-cols-[52px_1fr_auto] items-center gap-2 border-b border-white/[0.045] px-3 py-3 transition hover:bg-white/[0.03] sm:grid-cols-[84px_1fr_190px_auto] sm:gap-3">
   <div>
     {#if live}
       <div class="flex items-center gap-1.5 text-[10.5px] font-bold text-mint">
@@ -25,14 +25,14 @@
       <div class="text-[10.5px] font-semibold uppercase tracking-wide text-fog-dim">FT</div>
       <div class="num mt-0.5 text-[11px] text-white/60">{fixture.score.home}–{fixture.score.away}</div>
     {:else}
-      <div class="num text-[11.5px] font-semibold text-white/85">{formatKickoff(fixture.kickoff).split(' ').slice(-1)}</div>
+      <div class="num text-[11px] font-semibold text-white/85 sm:text-[11.5px]">{formatKickoff(fixture.kickoff).split(' ').slice(-1)}</div>
       <div class="mt-0.5 text-[9.5px] text-fog-dim">{new Date(fixture.kickoff).toLocaleDateString('en-NG', { day: '2-digit', month: 'short' })}</div>
     {/if}
   </div>
 
   <div class="min-w-0">
     <div class="mb-1 flex items-center gap-1.5 text-[9.5px] uppercase tracking-[0.1em] text-fog-dim">
-      <span class="h-2 w-1 rounded-full" style={`background:${league?.colour}`}></span>{league?.shortName}
+      <span class="h-2 w-1 shrink-0 rounded-full" style={`background:${league?.colour}`}></span><span class="truncate">{league?.shortName}</span>
       <span class="hidden sm:inline">· {fixture.round}</span>
     </div>
     <div class="grid gap-1">
@@ -65,13 +65,13 @@
     </div>
   </div>
 
-  <div class="min-w-[92px] text-right">
+  <div class="min-w-[74px] text-right sm:min-w-[92px]">
     {#if pick}
-      <div class="text-[10px] font-semibold uppercase tracking-wide text-fog-dim">Best edge</div>
+      <div class="text-[9px] font-semibold uppercase tracking-wide text-fog-dim">Best edge</div>
       <div class="num text-[13px] font-bold text-lime">{pick.odds.toFixed(2)}</div>
-      <div class="text-[10px] font-semibold text-mint">+{(pick.edge * 100).toFixed(1)}%</div>
+      <div class="num text-[10px] font-semibold text-mint">+{(pick.edge * 100).toFixed(1)}%</div>
     {:else}
-      <div class="text-[10px] font-semibold uppercase tracking-wide text-fog-dim">Model pick</div>
+      <div class="text-[9px] font-semibold uppercase tracking-wide text-fog-dim">Model pick</div>
       <div class="num text-[13px] font-bold text-white">{prediction.recommended.odds.toFixed(2)}</div>
       <div class="text-[10px] text-fog-dim">{prediction.confidence}% conf.</div>
     {/if}

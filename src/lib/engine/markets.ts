@@ -1,4 +1,5 @@
-import { BOOKMAKERS, TEAM_MAP } from '#lib/data/catalog';
+import { BOOKMAKERS } from '#lib/data/catalog';
+import { awayTeam, homeTeam } from '#lib/data/registry';
 import type { Fixture, Market, MarketGroup, MarketOutcome, ScoreCell } from '#lib/types';
 import { clamp, fairOdds, jitter, kellyFraction, normalCdf, round } from './core';
 
@@ -60,8 +61,8 @@ function htft(first: ScoreCell[], second: ScoreCell[]): number[] {
 
 export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
   const markets: Market[] = [];
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
   const hs = home.shortName;
   const as = away.shortName;
   const cells = core.grid;

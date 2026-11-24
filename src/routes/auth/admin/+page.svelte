@@ -14,7 +14,7 @@
   <a href="/" aria-label="CaveBettor home" class="mb-8"><BrandMark size={36} withWordmark /></a>
   <div class="panel p-6">
     <span class="chip chip-violet"><ShieldCheck size={11} /> Super admin</span>
-    <h1 class="display mt-4 text-[26px] font-bold tracking-tight text-white">Restricted console.</h1>
+    <h1 class="display mt-4 text-[22px] font-bold tracking-tight text-white sm:text-[26px]">Restricted console.</h1>
     <p class="mt-1.5 text-[12px] leading-relaxed text-fog">Password access for the platform owner. Every sign-in is mirrored to the Convex audit log.</p>
 
     {#if !data.configured}

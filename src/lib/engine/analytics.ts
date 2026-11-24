@@ -1,4 +1,5 @@
-import { BOOKMAKERS, DATA_SOURCES, LEAGUES, MODELS, TEAMS, TEAM_MAP } from '#lib/data/catalog';
+import { BOOKMAKERS, DATA_SOURCES, LEAGUES, MODELS, TEAMS } from '#lib/data/catalog';
+import { resolveTeam } from '#lib/data/registry';
 import type {
   AnalyticsSummary,
   BankrollPoint,
@@ -57,7 +58,7 @@ export function getPaperBets(): PaperBet[] {
     bets.push({
       id: `bet_${(hashString(`paper-${i}`) >>> 0).toString(36)}`,
       fixtureId: fixture.id,
-      fixtureLabel: `${TEAM_MAP[fixture.homeId].shortName} vs ${TEAM_MAP[fixture.awayId].shortName}`,
+      fixtureLabel: `${resolveTeam(fixture.homeId, fixture.leagueId).shortName} vs ${resolveTeam(fixture.awayId, fixture.leagueId).shortName}`,
       selection: outcome.label,
       market: pick.label,
       odds: outcome.bookOdds,
@@ -79,7 +80,7 @@ export function getPaperBets(): PaperBet[] {
     bets.push({
       id: `bet_open_${i}`,
       fixtureId: fixture.id,
-      fixtureLabel: `${TEAM_MAP[fixture.homeId].shortName} vs ${TEAM_MAP[fixture.awayId].shortName}`,
+      fixtureLabel: `${resolveTeam(fixture.homeId, fixture.leagueId).shortName} vs ${resolveTeam(fixture.awayId, fixture.leagueId).shortName}`,
       selection: outcome.label,
       market: pick.label,
       odds: outcome.bookOdds,
@@ -366,8 +367,8 @@ export function searchWorkspace(query: string) {
   const results: { type: string; id: string; title: string; subtitle: string; href: string }[] = [];
 
   for (const f of fixtures) {
-    const home = TEAM_MAP[f.homeId];
-    const away = TEAM_MAP[f.awayId];
+    const home = resolveTeam(f.homeId, f.leagueId);
+    const away = resolveTeam(f.awayId, f.leagueId);
     const league = LEAGUES.find((l) => l.id === f.leagueId);
     if (`${home.name} ${away.name} ${league?.name ?? ''}`.toLowerCase().includes(q)) {
       results.push({

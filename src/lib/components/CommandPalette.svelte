@@ -16,7 +16,12 @@
     { type: 'Page', id: 'q2', title: 'Fixtures & predictions', subtitle: 'All sports', href: '/fixtures' },
     { type: 'Page', id: 'q3', title: 'Value board', subtitle: 'Every positive-EV pick', href: '/predictions' },
     { type: 'Page', id: 'q4', title: 'Model laboratory', subtitle: 'Training, calibration, drift', href: '/models' },
-    { type: 'Page', id: 'q5', title: 'Data pipeline', subtitle: 'Scrapers and API sources', href: '/scrapers' }
+    { type: 'Page', id: 'q5', title: 'Data pipeline', subtitle: 'Scrapers and API sources', href: '/scrapers' },
+    { type: 'Page', id: 'q6', title: 'Football desk', subtitle: 'Sport-specific engine', href: '/sports/football' },
+    { type: 'Page', id: 'q7', title: 'Basketball desk', subtitle: 'EuroLeague & NBBF', href: '/sports/basketball' },
+    { type: 'Page', id: 'q8', title: 'NBA desk', subtitle: 'League-specific engine', href: '/sports/nba' },
+    { type: 'Page', id: 'q9', title: 'Ice hockey desk', subtitle: 'NHL & SHL', href: '/sports/icehockey' },
+    { type: 'Page', id: 'q10', title: 'Baseball desk', subtitle: 'MLB & NPB', href: '/sports/baseball' }
   ];
 
   $effect(() => {

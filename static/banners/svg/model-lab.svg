@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 400" width="1600" height="400" role="img" aria-label="Layered probability curves rising through a measured grid">
+  <defs>
+    <linearGradient id="ml-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#08130f"/>
+      <stop offset="1" stop-color="#0d2419"/>
+    </linearGradient>
+    <linearGradient id="ml-line" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#34e7a1" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#c9ff4d"/>
+    </linearGradient>
+    <radialGradient id="ml-glow" cx="0.72" cy="0.3" r="0.6">
+      <stop offset="0" stop-color="#c9ff4d" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#c9ff4d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="400" fill="url(#ml-bg)"/>
+  <rect width="1600" height="400" fill="url(#ml-glow)"/>
+  <g stroke="#9fb8ad" stroke-opacity="0.12" stroke-width="1">
+    <path d="M0 100H1600M0 180H1600M0 260H1600M0 340H1600"/>
+    <path d="M200 0V400M520 0V400M840 0V400M1160 0V400M1480 0V400"/>
+  </g>
+  <g fill="none" stroke="url(#ml-line)" stroke-width="3" stroke-linecap="round">
+    <path d="M40 330C260 320 340 300 520 268 700 236 820 214 1000 168 1180 122 1320 92 1560 62"/>
+    <path d="M40 356C280 350 460 336 640 318 820 300 980 268 1140 232 1300 196 1420 176 1560 158" stroke-opacity="0.45"/>
+  </g>
+  <g fill="#c9ff4d">
+    <circle cx="520" cy="268" r="6"/><circle cx="1000" cy="168" r="6"/><circle cx="1560" cy="62" r="7"/>
+  </g>
+  <g stroke="#c9ff4d" stroke-opacity="0.35" stroke-width="1.5" fill="none">
+    <path d="M1180 92l30-44 30 44-30 44z"/>
+    <path d="M640 122l22-32 22 32-22 32z"/>
+  </g>
+</svg>

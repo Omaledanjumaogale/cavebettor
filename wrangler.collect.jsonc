@@ -1,0 +1,14 @@
+{
+  "name": "cavebettor-collect-cron",
+  "main": "workers/collect-cron.ts",
+  "compatibility_date": "2026-09-01",
+  "vars": {
+    "APP_URL": "https://cavebettor.ewinproject.org",
+    "COLLECT_URL": "https://cavebettor.ewinproject.org/api/providers/refresh"
+  },
+  "triggers": {
+    // Three refreshes a day keeps the daily API-Football allowance intact
+    // while still giving near-real schedules and live prices.
+    "crons": ["5 4 * * *", "5 12 * * *", "5 18 * * *"]
+  }
+}

@@ -3,7 +3,7 @@
   import BrandMark from '#lib/components/BrandMark.svelte';
 
   let { data } = $props();
-  const nextQuery = data.next && data.next !== '/' ? `?next=${encodeURIComponent(data.next)}` : '';
+  const nextQuery = $derived(data.next && data.next !== '/' ? `?next=${encodeURIComponent(data.next)}` : '');
 </script>
 
 <svelte:head><title>Sign in — CaveBettor</title></svelte:head>

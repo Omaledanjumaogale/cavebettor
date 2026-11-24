@@ -32,5 +32,5 @@ export const GET: RequestHandler = async ({ url, cookies, request }) => {
     userId: mirrored?.userId,
     ip: request.headers.get('cf-connecting-ip') ?? undefined
   });
-  redirect(303, '/');
+  redirect(303, '/dashboard');
 };

@@ -1,0 +1,348 @@
+{
+  "builtAt": "2026-11-24T07:25:46.447Z",
+  "quality": 82,
+  "responsiveWidths": [
+    640,
+    1024
+  ],
+  "images": [
+    {
+      "id": "hero-command-centre",
+      "placement": "landing.hero",
+      "group": "hero",
+      "path": "static/images/generated/hero-command-centre.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 41988,
+      "sha256": "43cfe38577b38208695515d92bd1c5a4ff49c8442489fbf6ed9c385410046f16",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/hero-command-centre-640.webp",
+          "width": 640,
+          "bytes": 16960
+        },
+        {
+          "path": "static/images/responsive/hero-command-centre-1024.webp",
+          "width": 1024,
+          "bytes": 32758
+        }
+      ]
+    },
+    {
+      "id": "promo-slide-01",
+      "placement": "landing.slider.slide-1",
+      "group": "slider",
+      "path": "static/images/generated/promo-slide-01.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 32538,
+      "sha256": "2cfb990e0fa4c74b12f2f530c6865388b781f1142fb2aa2fcc4dbec165daf229",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/promo-slide-01-640.webp",
+          "width": 640,
+          "bytes": 14618
+        },
+        {
+          "path": "static/images/responsive/promo-slide-01-1024.webp",
+          "width": 1024,
+          "bytes": 25696
+        }
+      ]
+    },
+    {
+      "id": "promo-slide-02",
+      "placement": "landing.slider.slide-2",
+      "group": "slider",
+      "path": "static/images/generated/promo-slide-02.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 51736,
+      "sha256": "74129c72906bf9e1c1c15e92a65e4a77021d5f36f0b243484a1c84ee20134b5c",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/promo-slide-02-640.webp",
+          "width": 640,
+          "bytes": 17726
+        },
+        {
+          "path": "static/images/responsive/promo-slide-02-1024.webp",
+          "width": 1024,
+          "bytes": 38156
+        }
+      ]
+    },
+    {
+      "id": "promo-slide-03",
+      "placement": "landing.slider.slide-3",
+      "group": "slider",
+      "path": "static/images/generated/promo-slide-03.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 67152,
+      "sha256": "2b169b0c0ae631ebd0bc4840499016de5d7dee0a5d8b2e0dc0fe0a00d10198fb",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/promo-slide-03-640.webp",
+          "width": 640,
+          "bytes": 21822
+        },
+        {
+          "path": "static/images/responsive/promo-slide-03-1024.webp",
+          "width": 1024,
+          "bytes": 49776
+        }
+      ]
+    },
+    {
+      "id": "story-customer",
+      "placement": "landing.story.stage-1",
+      "group": "story",
+      "path": "static/images/generated/story-customer.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 41266,
+      "sha256": "ba2a6d383afc3497218b02f18f5214aa6f00e83b54be61e95bd9f734fbcd36a5",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/story-customer-640.webp",
+          "width": 640,
+          "bytes": 16270
+        },
+        {
+          "path": "static/images/responsive/story-customer-1024.webp",
+          "width": 1024,
+          "bytes": 31418
+        }
+      ]
+    },
+    {
+      "id": "story-challenge",
+      "placement": "landing.story.stage-2",
+      "group": "story",
+      "path": "static/images/generated/story-challenge.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 82154,
+      "sha256": "51dfaa17cb02c11837dcb229ba71cbca925c87a250f79789781a46d18d10d0c7",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/story-challenge-640.webp",
+          "width": 640,
+          "bytes": 33624
+        },
+        {
+          "path": "static/images/responsive/story-challenge-1024.webp",
+          "width": 1024,
+          "bytes": 63678
+        }
+      ]
+    },
+    {
+      "id": "story-discovery",
+      "placement": "landing.story.stage-3",
+      "group": "story",
+      "path": "static/images/generated/story-discovery.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 35348,
+      "sha256": "b9f0d2ef0cddc79a92bad61a88e09aca2b57d1d325a9fbd421359816d5ab9b4c",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/story-discovery-640.webp",
+          "width": 640,
+          "bytes": 15106
+        },
+        {
+          "path": "static/images/responsive/story-discovery-1024.webp",
+          "width": 1024,
+          "bytes": 27960
+        }
+      ]
+    },
+    {
+      "id": "story-guide",
+      "placement": "landing.story.stage-4",
+      "group": "story",
+      "path": "static/images/generated/story-guide.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 40750,
+      "sha256": "6b08c75dd6c3a0360620b2759d3952293ff0397587b14732ee479c87d4185efa",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/story-guide-640.webp",
+          "width": 640,
+          "bytes": 17020
+        },
+        {
+          "path": "static/images/responsive/story-guide-1024.webp",
+          "width": 1024,
+          "bytes": 31640
+        }
+      ]
+    },
+    {
+      "id": "story-experience",
+      "placement": "landing.story.stage-5",
+      "group": "story",
+      "path": "static/images/generated/story-experience.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 43402,
+      "sha256": "94191baf1f05e0123fbfcbe464648459aedf38ce65ec3f20d525b83dbbdfab66",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/story-experience-640.webp",
+          "width": 640,
+          "bytes": 16798
+        },
+        {
+          "path": "static/images/responsive/story-experience-1024.webp",
+          "width": 1024,
+          "bytes": 33222
+        }
+      ]
+    },
+    {
+      "id": "story-outcome",
+      "placement": "landing.story.stage-6",
+      "group": "story",
+      "path": "static/images/generated/story-outcome.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 41724,
+      "sha256": "cbd4c701ed857b778c26410f9c3c526ae880e452db00129d44e767d685cdbba4",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/story-outcome-640.webp",
+          "width": 640,
+          "bytes": 16598
+        },
+        {
+          "path": "static/images/responsive/story-outcome-1024.webp",
+          "width": 1024,
+          "bytes": 32156
+        }
+      ]
+    },
+    {
+      "id": "feature-learning",
+      "placement": "landing.features.learning",
+      "group": "feature",
+      "path": "static/images/generated/feature-learning.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 45244,
+      "sha256": "43191d85c3510c9e04946cc96bbe60ecc697c88f928d819974835d73f1fa9c81",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/feature-learning-640.webp",
+          "width": 640,
+          "bytes": 17838
+        },
+        {
+          "path": "static/images/responsive/feature-learning-1024.webp",
+          "width": 1024,
+          "bytes": 35154
+        }
+      ]
+    },
+    {
+      "id": "feature-workflow",
+      "placement": "landing.features.workflow",
+      "group": "feature",
+      "path": "static/images/generated/feature-workflow.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 58132,
+      "sha256": "2c9a129b021079e2a28e3a4eee390cf76e3a3d7037ce62bd9f61d5bc30dd35d6",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/feature-workflow-640.webp",
+          "width": 640,
+          "bytes": 23910
+        },
+        {
+          "path": "static/images/responsive/feature-workflow-1024.webp",
+          "width": 1024,
+          "bytes": 45404
+        }
+      ]
+    },
+    {
+      "id": "feature-community",
+      "placement": "landing.features.community",
+      "group": "feature",
+      "path": "static/images/generated/feature-community.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 44650,
+      "sha256": "17c7e34c38134c30e4fe26916550f775f4eb0f94529a43af2da16fa0e89429df",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/feature-community-640.webp",
+          "width": 640,
+          "bytes": 19670
+        },
+        {
+          "path": "static/images/responsive/feature-community-1024.webp",
+          "width": 1024,
+          "bytes": 34548
+        }
+      ]
+    },
+    {
+      "id": "dashboard-ecosystem",
+      "placement": "landing.features.ecosystem",
+      "group": "feature",
+      "path": "static/images/generated/dashboard-ecosystem.webp",
+      "width": 1248,
+      "height": 832,
+      "bytes": 41040,
+      "sha256": "071ac6720d2f9395d11ed7ff8e89770fb4034d66f51f3b0275f8ac72a68b85de",
+      "derivatives": [
+        {
+          "path": "static/images/responsive/dashboard-ecosystem-640.webp",
+          "width": 640,
+          "bytes": 18402
+        },
+        {
+          "path": "static/images/responsive/dashboard-ecosystem-1024.webp",
+          "width": 1024,
+          "bytes": 32402
+        }
+      ]
+    }
+  ],
+  "banners": [
+    {
+      "id": "live-desk",
+      "svg": "static/banners/svg/live-desk.svg",
+      "webp": "static/banners/webp/live-desk.webp",
+      "bytes": 9324,
+      "sha256": "beda0ca0b64afba6820ed0f68223812b467e1379a9a2742e07ba5bfca9714041"
+    },
+    {
+      "id": "model-lab",
+      "svg": "static/banners/svg/model-lab.svg",
+      "webp": "static/banners/webp/model-lab.webp",
+      "bytes": 12178,
+      "sha256": "73617779eabcf951e4c69a378425a57b113c2cc286c1a5df2a6e69bf3cdd4a44"
+    },
+    {
+      "id": "paper-ledger",
+      "svg": "static/banners/svg/paper-ledger.svg",
+      "webp": "static/banners/webp/paper-ledger.webp",
+      "bytes": 7200,
+      "sha256": "76109d03d8f41750905fd4bd2b235f94df93c03c0a96144c6cc3ce298b07cea5"
+    },
+    {
+      "id": "sport-languages",
+      "svg": "static/banners/svg/sport-languages.svg",
+      "webp": "static/banners/webp/sport-languages.webp",
+      "bytes": 9692,
+      "sha256": "0a81653c3d788bd6f56d88a016bb99c0884002a9916a357d6c3db827d3174448"
+    }
+  ]
+}

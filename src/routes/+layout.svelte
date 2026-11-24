@@ -1,16 +1,13 @@
 <script lang="ts">
   import '../app.css';
-  import AppShell from '#lib/components/AppShell.svelte';
-  import { page } from '$app/state';
   import type { Snippet } from 'svelte';
-  let { children, data }: { children: Snippet; data: any } = $props();
-  const bare = $derived(page.url.pathname.startsWith('/auth'));
+
+  let { children }: { children: Snippet } = $props();
 </script>
 
-{#if bare}
-  {@render children()}
-{:else}
-  <AppShell liveCount={data.counts.live} valueCount={data.counts.value} fixturesCount={data.counts.fixtures} user={data.user}>
-    {@render children()}
-  </AppShell>
-{/if}
+<!--
+  Root layout is intentionally minimal: it must not read cookies, call Convex or
+  touch platform.env, so that every route group below it can be prerendered as a
+  static HTML shell and served straight from Cloudflare without invoking a Worker.
+-->
+{@render children()}

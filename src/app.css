@@ -48,6 +48,13 @@
       radial-gradient(800px 700px at 60% 120%, rgba(111, 201, 255, 0.05), transparent 60%);
     background-attachment: fixed;
     min-height: 100vh;
+    /* Prevent accidental horizontal scrolling on small screens. */
+    overflow-x: hidden;
+  }
+
+  /* Respect the safe area on notched phones and in landscape. */
+  html {
+    -webkit-text-size-adjust: 100%;
   }
 
   ::selection {
@@ -231,6 +238,56 @@
 
   .table-wrap {
     @apply overflow-x-auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  /*
+   * Data tables are dense by design. On phones they stay scrollable rather
+   * than squeezing columns into unreadable slivers.
+   */
+  .data-table {
+    min-width: 520px;
+  }
+
+  @media (max-width: 640px) {
+    .data-table {
+      min-width: 460px;
+      font-size: 12px;
+    }
+
+    .data-table thead th,
+    .data-table tbody td {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+  }
+
+  /* Momentum-style horizontal scrollers used across the workspace. */
+  .scroll-x {
+    @apply overflow-x-auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Touch targets: minimum 40px for controls on small screens. */
+  @media (max-width: 768px) {
+    .btn {
+      min-height: 40px;
+    }
+
+    .btn-icon {
+      width: 40px;
+      height: 40px;
+    }
+
+    .chip {
+      padding-top: 6px;
+      padding-bottom: 6px;
+    }
   }
 
   .data-table {

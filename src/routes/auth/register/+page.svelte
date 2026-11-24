@@ -9,7 +9,7 @@
   <a href="/" aria-label="CaveBettor home" class="mb-8"><BrandMark size={36} withWordmark /></a>
   <div class="panel p-6">
     <span class="chip chip-lime"><Sparkles size={10} /> Create account</span>
-    <h1 class="display mt-4 text-[26px] font-bold tracking-tight text-white">Start with a verified identity.</h1>
+    <h1 class="display mt-4 text-[22px] font-bold tracking-tight text-white sm:text-[26px]">Start with a verified identity.</h1>
     <p class="mt-1.5 text-[12px] leading-relaxed text-fog">CaveBettor uses Google, GitHub or your existing E-WIN account. We never store a password, and your provider never shares it with us.</p>
 
     <div class="mt-6 space-y-2.5">

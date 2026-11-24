@@ -118,7 +118,7 @@ export function readOauthState(cookies: Cookies, provider: string) {
 }
 
 export function safeNext(value: string | null | undefined) {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/dashboard';
   return value;
 }
 

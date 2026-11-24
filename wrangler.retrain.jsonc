@@ -1,0 +1,13 @@
+{
+  "name": "cavebettor-retrain-cron",
+  "main": "workers/retrain-cron.ts",
+  "compatibility_date": "2026-09-01",
+  "vars": {
+    "APP_URL": "https://cavebettor.ewinproject.org",
+    "RETRAIN_URL": "https://cavebettor.ewinproject.org/api/models/retrain"
+  },
+  "triggers": {
+    // 03:00 UTC = 04:00 Africa/Lagos (WAT, UTC+1).
+    "crons": ["0 3 * * *"]
+  }
+}

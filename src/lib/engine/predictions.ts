@@ -1,4 +1,5 @@
-import { BOOKMAKERS, LEAGUE_MAP, MODELS, TEAM_MAP } from '#lib/data/catalog';
+import { BOOKMAKERS, LEAGUE_MAP, MODELS } from '#lib/data/catalog';
+import { awayTeam, fixtureLeague, homeTeam } from '#lib/data/registry';
 import { sportProfile } from '#lib/data/sportProfiles';
 import type {
   AnalysisMetric,
@@ -185,8 +186,8 @@ function footballHTFTProbs(first: ScoreCell[], second: ScoreCell[]): number[] {
 }
 
 function footballCore(fixture: Fixture): CoreModel {
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
   const seed = fixture.id;
   const expected = expectedScore('football', home, away, 1.065);
   const rho = -0.085 + jitter(seed + 'rho', 0.018);
@@ -234,8 +235,8 @@ function footballCore(fixture: Fixture): CoreModel {
 }
 
 function hockeyCore(fixture: Fixture): CoreModel {
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
   const expected = expectedScore('icehockey', home, away, 1.04);
   const rho = -0.05;
   const live = fixture.status === 'live';
@@ -278,8 +279,8 @@ function hockeyCore(fixture: Fixture): CoreModel {
 }
 
 function basketballCore(fixture: Fixture): CoreModel {
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
   const expected = expectedScore('basketball', home, away, 1);
   const seed = fixture.id;
   const live = fixture.status === 'live';
@@ -338,8 +339,8 @@ function basketballCore(fixture: Fixture): CoreModel {
 }
 
 function baseballCore(fixture: Fixture): CoreModel {
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
   const expected = expectedScore('baseball', home, away, 1.03);
   const sd = 2.7;
   const live = fixture.status === 'live';
@@ -377,8 +378,8 @@ function baseballCore(fixture: Fixture): CoreModel {
 }
 
 function tennisCore(fixture: Fixture): CoreModel {
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
   const bestOfFive = fixture.bestOfFive ?? (fixture.leagueId === 'grandslam' && home.elo >= 2100 && away.elo >= 2100);
   const eloDiff = home.elo - away.elo + 26;
   let winProb = 1 / (1 + Math.pow(10, -eloDiff / 400));
@@ -439,8 +440,8 @@ function coreFor(fixture: Fixture): CoreModel {
 /* ── Model components ────────────────────────────────────────────────────── */
 
 function componentProbabilities(fixture: Fixture, core: CoreModel) {
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
   const seed = fixture.id;
   const eloHome = 1 / (1 + Math.pow(10, -(home.elo + 48 - away.elo) / 400));
   const eloDraw = fixture.sport === 'football' || fixture.sport === 'icehockey' ? 0.24 : 0;
@@ -572,9 +573,9 @@ function buildComponents(fixture: Fixture, core: CoreModel): ModelComponent[] {
 /* ── Insights & recommendation ───────────────────────────────────────────── */
 
 function buildInsights(fixture: Fixture, core: CoreModel, markets: Market[], confidence: number): Insight[] {
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
-  const league = LEAGUE_MAP[fixture.leagueId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
+  const league = fixtureLeague(fixture);
   const insights: Insight[] = [];
   const xgDiff = core.expected.home - core.expected.away;
 
@@ -679,8 +680,8 @@ function buildValueBets(markets: Market[], bankroll = PAPER_BANKROLL_NGN): Value
 function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: Fixture): Recommendation {
   const core = markets.find((m) => m.id === '1x2' || m.id === 'ml');
   const best = valueBets[0];
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
 
   if (best) {
     return {
@@ -713,8 +714,8 @@ function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: 
 }
 
 function buildMetrics(fixture: Fixture, core: CoreModel): AnalysisMetric[] {
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = homeTeam(fixture);
+  const away = awayTeam(fixture);
   const seed = fixture.id;
   const stat = (n: number, spread: number) => round(n + jitter(seed + n, spread), 1);
   if (fixture.sport === 'football') {

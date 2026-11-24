@@ -15,8 +15,51 @@
     "directory": ".svelte-kit/cloudflare",
     "binding": "ASSETS",
     "not_found_handling": "none",
-    "run_worker_first": true
+    // Static-first routing: the pre-rendered public pages and the build
+    // assets are served straight from the asset store without invoking the
+    // Worker. Only the routes that genuinely need the backend are listed
+    // here, so page loads stop consuming the shared Functions allowance.
+    "run_worker_first": [
+      "/api/*",
+      "/auth/*",
+      "/dashboard",
+      "/dashboard/*",
+      "/fixtures",
+      "/fixtures/*",
+      "/live",
+      "/live/*",
+      "/odds",
+      "/odds/*",
+      "/predictions",
+      "/predictions/*",
+      "/models",
+      "/models/*",
+      "/scrapers",
+      "/scrapers/*",
+      "/analytics",
+      "/analytics/*",
+      "/paper",
+      "/paper/*",
+      "/settings",
+      "/settings/*",
+      "/workspace",
+      "/workspace/*",
+      "/admin",
+      "/admin/*",
+      "/sports",
+      "/sports/*",
+      "/betslip",
+      "/betslip/*"
+    ]
   },
+  // Bulk provider fixtures, odds and training archives live in R2 so the
+  // Convex free tier keeps only tiny control-plane metadata.
+  "r2_buckets": [
+    {
+      "binding": "CAVEBETTOR_DATA",
+      "bucket_name": "cavebettor-data"
+    }
+  ],
   "routes": [
     { "pattern": "cavebettor.ewinproject.org", "custom_domain": true }
   ]

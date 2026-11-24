@@ -387,6 +387,34 @@ export default defineSchema({
     createdAt: v.number()
   }).index('by_created', ['createdAt']),
 
+  /**
+   * Provider budget ledger (control plane).
+   * One tiny row per provider+period so paid API ceilings can never be
+   * exceeded. No bulk payloads live here — those are cached in Cloudflare R2.
+   */
+  providerBudgets: defineTable({
+    key: v.string(),
+    used: v.number(),
+    reserved: v.number(),
+    limit: v.number(),
+    updatedAt: v.number()
+  }).index('by_key', ['key']),
+
+  /**
+   * Provider collection log (metadata only).
+   * The bulk rows live in Cloudflare R2; this table only records that a
+   * collection happened, how much it produced and whether it succeeded.
+   */
+  providerCollections: defineTable({
+    source: v.string(),
+    sport: v.string(),
+    rows: v.number(),
+    bytes: v.number(),
+    status: v.union(v.literal('succeeded'), v.literal('skipped'), v.literal('failed')),
+    detail: v.string(),
+    collectedAt: v.number()
+  }).index('by_collected', ['collectedAt']),
+
   /** Read-model snapshots written by the app sync worker. */
   liveSnapshots: defineTable({
     key: v.string(),

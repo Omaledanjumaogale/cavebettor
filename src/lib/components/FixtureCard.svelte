@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { LEAGUE_MAP, TEAM_MAP } from '#lib/data/catalog';
+  import { LEAGUE_MAP } from '#lib/data/catalog';
+  import { awayTeam, fixtureLeague, homeTeam } from '#lib/data/registry';
   import type { Fixture } from '#lib/types';
   import type { PredictionCard } from '#lib/snapshot';
   import { countdown, formatKickoff, formatTime } from '#lib/format';
@@ -8,9 +9,9 @@
   import ConfidenceMeter from './ConfidenceMeter.svelte';
 
   let { fixture, prediction, compact = false }: { fixture: Fixture; prediction: PredictionCard; compact?: boolean } = $props();
-  const league = $derived(LEAGUE_MAP[fixture.leagueId]);
-  const home = $derived(TEAM_MAP[fixture.homeId]);
-  const away = $derived(TEAM_MAP[fixture.awayId]);
+  const league = $derived(fixtureLeague(fixture));
+  const home = $derived(homeTeam(fixture));
+  const away = $derived(awayTeam(fixture));
   const live = $derived(fixture.status === 'live' || fixture.status === 'halftime');
   const finished = $derived(fixture.status === 'finished');
   const topPick = $derived(prediction.valueBets[0]);

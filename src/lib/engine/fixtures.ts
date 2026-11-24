@@ -1,4 +1,5 @@
 import { LEAGUES, LEAGUE_MAP, TEAMS, TEAM_MAP } from '#lib/data/catalog';
+import { resolveTeam } from '#lib/data/registry';
 import type { Fixture, FixtureStatus, FormResult, SportId, Team } from '#lib/types';
 import { clamp, hashString, mulberry32, normalCdf, seeded } from './core';
 
@@ -289,13 +290,13 @@ export function getFixture(id: string): Fixture | undefined {
 }
 
 export function fixtureLabel(fixture: Fixture): string {
-  const home = TEAM_MAP[fixture.homeId];
-  const away = TEAM_MAP[fixture.awayId];
+  const home = resolveTeam(fixture.homeId, fixture.leagueId);
+  const away = resolveTeam(fixture.awayId, fixture.leagueId);
   return `${home?.name ?? fixture.homeId} vs ${away?.name ?? fixture.awayId}`;
 }
 
-export function teamOf(id: string): Team | undefined {
-  return TEAM_MAP[id];
+export function teamOf(id: string, leagueId?: string): Team | undefined {
+  return TEAM_MAP[id] ?? resolveTeam(id, leagueId);
 }
 
 export function formPoints(form: FormResult[]): number {

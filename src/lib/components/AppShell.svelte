@@ -4,7 +4,8 @@
   import {
     LayoutDashboard, CalendarDays, Radio, Sparkles, Coins, BrainCircuit, Database,
     ChartNoAxesCombined, WalletCards, NotebookPen, Settings, CreditCard, ShieldCheck,
-    Search, Bell, Menu, X, ChevronDown, ArrowUpRight, CircleHelp, LogOut, Plus, Command
+    Search, Bell, Menu, X, ChevronDown, ArrowUpRight, CircleHelp, LogOut, Plus, Command,
+    Activity, Volleyball, Snowflake, CircleDot, Ticket
   } from '@lucide/svelte';
   import BrandMark from './BrandMark.svelte';
   import CommandPalette from './CommandPalette.svelte';
@@ -26,11 +27,22 @@
     {
       label: 'Intelligence',
       items: [
-        { href: '/', label: 'Overview', icon: LayoutDashboard, badge: '' },
+        { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, badge: '' },
         { href: '/fixtures', label: 'Fixtures', icon: CalendarDays, badge: String(fixturesCount) },
         { href: '/live', label: 'Live now', icon: Radio, badge: liveCount ? String(liveCount) : '', live: true },
         { href: '/predictions', label: 'Value board', icon: Sparkles, badge: valueCount ? String(valueCount) : '' },
         { href: '/odds', label: 'Odds & markets', icon: Coins, badge: '' }
+      ]
+    },
+    {
+      label: 'Sport desks',
+      items: [
+        { href: '/sports', label: 'All desks', icon: LayoutDashboard, badge: '' },
+        { href: '/sports/football', label: 'Football desk', icon: Activity, badge: '' },
+        { href: '/sports/basketball', label: 'Basketball desk', icon: Volleyball, badge: '' },
+        { href: '/sports/nba', label: 'NBA desk', icon: Volleyball, badge: '' },
+        { href: '/sports/icehockey', label: 'Ice hockey desk', icon: Snowflake, badge: '' },
+        { href: '/sports/baseball', label: 'Baseball desk', icon: CircleDot, badge: '' }
       ]
     },
     {
@@ -44,6 +56,7 @@
       label: 'Workspace',
       items: [
         { href: '/paper', label: 'Paper desk', icon: WalletCards, badge: '' },
+        { href: '/betslip', label: 'Betslip builder', icon: Ticket, badge: '' },
         { href: '/analytics', label: 'Performance', icon: ChartNoAxesCombined, badge: '' },
         { href: '/workspace', label: 'Research notes', icon: NotebookPen, badge: '' }
       ]
@@ -58,7 +71,13 @@
     }
   ]);
 
-  const active = (href: string) => (href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href));
+  const active = (href: string) => {
+    const path = page.url.pathname;
+    if (href === '/dashboard') return path === '/dashboard';
+    // "/sports" is a hub page — only highlight it on the hub itself.
+    if (href === '/sports') return path === '/sports';
+    return path.startsWith(href);
+  };
   const currentLabel = $derived(
     nav.flatMap((g) => g.items).find((i) => active(i.href))?.label ?? 'Overview'
   );
@@ -66,7 +85,7 @@
   const plan = $derived(viewer.plan);
 
   const mobileItems = [
-    { href: '/', label: 'Home', icon: LayoutDashboard },
+    { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
     { href: '/fixtures', label: 'Fixtures', icon: CalendarDays },
     { href: '/live', label: 'Live', icon: Radio },
     { href: '/predictions', label: 'Value', icon: Sparkles },
@@ -78,7 +97,7 @@
   <!-- Desktop sidebar -->
   <aside class="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r border-white/[0.07] bg-pitch-950/80 backdrop-blur-xl lg:flex">
     <div class="flex h-16 shrink-0 items-center px-5">
-      <a href="/" aria-label="CaveBettor home"><BrandMark size={34} withWordmark /></a>
+      <a href="/dashboard" aria-label="CaveBettor command centre"><BrandMark size={34} withWordmark /></a>
     </div>
 
     <div class="mx-3 mb-3 rounded-xl border border-white/[0.07] bg-white/[0.025] p-2.5">
@@ -177,7 +196,7 @@
   <!-- Main -->
   <div class="lg:pl-[248px]">
     <header class="sticky top-0 z-30 border-b border-white/[0.07] bg-void/75 backdrop-blur-xl">
-      <div class="flex h-16 items-center gap-3 px-4 sm:px-6">
+      <div class="flex h-14 items-center gap-2.5 px-3.5 sm:h-16 sm:gap-3 sm:px-6">
         <button class="btn-icon lg:hidden" onclick={() => (drawer = true)} aria-label="Open menu"><Menu size={16} /></button>
         <div class="hidden min-w-0 items-center gap-2 text-[11px] sm:flex">
           <span class="text-fog-dim">Workspace</span>
@@ -185,9 +204,18 @@
           <span class="font-semibold text-white">{currentLabel}</span>
         </div>
 
+        <!-- Compact search trigger on phones, full field from sm upwards. -->
         <button
           onclick={() => (searchOpen = true)}
-          class="ml-auto flex h-9 w-full max-w-[300px] items-center gap-2 rounded-xl border border-white/[0.09] bg-white/[0.025] px-3 text-left text-[11.5px] text-fog-dim transition hover:border-white/20 hover:bg-white/[0.05]"
+          class="btn-icon ml-auto shrink-0 sm:hidden"
+          aria-label="Search"
+        >
+          <Search size={15} />
+        </button>
+
+        <button
+          onclick={() => (searchOpen = true)}
+          class="ml-auto hidden h-9 w-full max-w-[300px] items-center gap-2 rounded-xl border border-white/[0.09] bg-white/[0.025] px-3 text-left text-[11.5px] text-fog-dim transition hover:border-white/20 hover:bg-white/[0.05] sm:flex"
         >
           <Search size={13} />
           <span class="flex-1 truncate">Search teams, fixtures, models…</span>
@@ -212,7 +240,7 @@
       </div>
     </header>
 
-    <main class="mx-auto w-full max-w-[1560px] px-4 pb-24 pt-5 sm:px-6 lg:pb-10">
+    <main class="mx-auto w-full max-w-[1560px] px-3.5 pb-24 pt-4 sm:px-6 sm:pt-5 lg:pb-10">
       {@render children()}
     </main>
 
@@ -228,14 +256,14 @@
 
   <!-- Mobile bottom nav -->
   <nav class="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-pitch-950/95 backdrop-blur-xl lg:hidden">
-    <div class="flex items-stretch justify-around px-2 pb-[max(6px,env(safe-area-inset-bottom))] pt-1.5">
+    <div class="flex items-stretch justify-around px-1 pb-[max(6px,env(safe-area-inset-bottom))] pt-1.5">
       {#each mobileItems as item}
-        <a href={item.href} class={`flex flex-1 flex-col items-center gap-1 rounded-lg py-1.5 text-[9px] font-medium ${active(item.href) ? 'text-lime' : 'text-fog-dim'}`}>
+        <a href={item.href} class={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-0.5 py-1.5 text-[9px] font-medium ${active(item.href) ? 'text-lime' : 'text-fog-dim'}`}>
           <item.icon size={17} strokeWidth={active(item.href) ? 2.3 : 1.8} />
           {item.label}
         </a>
       {/each}
-      <button onclick={() => (drawer = true)} class="flex flex-1 flex-col items-center gap-1 rounded-lg py-1.5 text-[9px] font-medium text-fog-dim">
+      <button onclick={() => (drawer = true)} class="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-0.5 py-1.5 text-[9px] font-medium text-fog-dim">
         <Menu size={17} />
         More
       </button>

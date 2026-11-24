@@ -56,6 +56,16 @@ export interface Fixture {
   leagueId: string;
   homeId: string;
   awayId: string;
+  /**
+   * Live fixtures fetched from a provider carry the real team and league
+   * records inline, because those squads are not part of the built-in
+   * catalogue. When present they take precedence over the catalogue.
+   */
+  homeTeam?: Team;
+  awayTeam?: Team;
+  league?: League;
+  /** Where the fixture came from: the local engine or a live provider. */
+  source?: 'engine' | 'api-football';
   kickoff: string;
   status: FixtureStatus;
   minute?: number;

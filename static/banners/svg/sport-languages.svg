@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 400" width="1600" height="400" role="img" aria-label="Five coloured radial segments, one for each sport">
+  <defs>
+    <linearGradient id="sl-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a0716"/>
+      <stop offset="1" stop-color="#181436"/>
+    </linearGradient>
+    <radialGradient id="sl-halo" cx="0.24" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#a99bff" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#a99bff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="400" fill="url(#sl-bg)"/>
+  <rect width="1600" height="400" fill="url(#sl-halo)"/>
+  <g transform="translate(360,200)">
+    <g fill="none" stroke-width="16">
+      <path d="M0 0 -84 -146" stroke="#c9ff4d" stroke-opacity="0.9"/>
+      <path d="M0 0 0 -160" stroke="#f6c453" stroke-opacity="0.85"/>
+      <path d="M0 0 84 -146" stroke="#6fc9ff" stroke-opacity="0.85"/>
+      <path d="M0 0 132 -92" stroke="#a99bff" stroke-opacity="0.8"/>
+      <path d="M0 0 132 92" stroke="#ff6478" stroke-opacity="0.8"/>
+    </g>
+    <circle r="26" fill="#0f1a12" stroke="#c9ff4d" stroke-opacity="0.6" stroke-width="2"/>
+    <circle r="230" fill="none" stroke="#a99bff" stroke-opacity="0.12" stroke-width="1"/>
+  </g>
+  <g stroke="#a99bff" stroke-opacity="0.16">
+    <path d="M760 120H1500M760 200H1500M760 280H1500"/>
+  </g>
+  <g fill="#c7c0ff" fill-opacity="0.22">
+    <rect x="760" y="112" width="180" height="8" rx="4"/>
+    <rect x="760" y="160" width="300" height="8" rx="4"/>
+    <rect x="760" y="192" width="240" height="8" rx="4"/>
+    <rect x="760" y="224" width="360" height="8" rx="4"/>
+    <rect x="760" y="272" width="200" height="8" rx="4"/>
+  </g>
+  <g fill="none" stroke="#ff6478" stroke-opacity="0.4" stroke-width="2">
+    <circle cx="1420" cy="250" r="60"/>
+  </g>
+</svg>

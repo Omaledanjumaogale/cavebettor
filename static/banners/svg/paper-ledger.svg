@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 400" width="1600" height="400" role="img" aria-label="Stacked ledger sheets with a rising settlement column chart">
+  <defs>
+    <linearGradient id="pl-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#120f07"/>
+      <stop offset="1" stop-color="#241a09"/>
+    </linearGradient>
+    <linearGradient id="pl-bar" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#f6c453" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#f6c453"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="400" fill="url(#pl-bg)"/>
+  <g opacity="0.85">
+    <rect x="120" y="70" width="560" height="300" rx="18" fill="#f6c453" fill-opacity="0.05" stroke="#f6c453" stroke-opacity="0.25"/>
+    <rect x="180" y="50" width="560" height="300" rx="18" fill="#f6c453" fill-opacity="0.07" stroke="#f6c453" stroke-opacity="0.35"/>
+    <rect x="240" y="30" width="560" height="300" rx="18" fill="#0f1a12" stroke="#f6c453" stroke-opacity="0.5"/>
+    <g stroke="#9fb8ad" stroke-opacity="0.18">
+      <path d="M280 110H760M280 160H760M280 210H760M280 260H760"/>
+      <path d="M360 60V300M460 60V300M560 60V300M660 60V300"/>
+    </g>
+    <g fill="url(#pl-bar)">
+      <rect x="300" y="210" width="34" height="90" rx="8"/>
+      <rect x="400" y="180" width="34" height="120" rx="8"/>
+      <rect x="500" y="140" width="34" height="160" rx="8"/>
+      <rect x="600" y="100" width="34" height="200" rx="8"/>
+      <rect x="700" y="70" width="34" height="230" rx="8"/>
+    </g>
+  </g>
+  <g stroke="#f6c453" stroke-opacity="0.35" stroke-width="2" fill="none">
+    <path d="M880 330C960 326 1000 310 1060 288 1130 262 1170 250 1240 226 1320 198 1400 176 1540 150"/>
+  </g>
+  <g fill="#f6c453">
+    <circle cx="1240" cy="226" r="6"/><circle cx="1540" cy="150" r="7"/>
+  </g>
+</svg>

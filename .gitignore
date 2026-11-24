@@ -12,3 +12,6 @@ coverage/
 
 # local research artifacts (third-party README snapshots)
 research/
+
+# generated at build time
+static/build-info.json

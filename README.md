@@ -69,7 +69,48 @@ npm run check           # svelte-check + TypeScript
 npm test                # engine unit tests
 npm run convex:dev      # start Convex (generates convex/_generated)
 npm run seed            # seed the Convex demo workspace
+npm run assets:generate # generate the landing-page visuals (Agnes images API)
+npm run assets:build    # WebP masters + responsive derivatives + build-info.json
+npm run assets:unique   # one-visual-per-placement guard
+npm run assets:check    # asset pipeline validation
+npm run verify:static   # assert the public pages exist as static HTML
+npm run production:verify  # verify assets and routes on the live domain
 ```
+
+### Static-first delivery
+
+Public pages are pre-rendered so that a page view never consumes a Worker invocation, while authentication, private
+data and account mutations stay on the backend path.
+
+| Route | Delivery | Protected paths |
+| --- | --- | --- |
+| `/` (landing), `/pricing` | static HTML, excluded from Functions | `/api/*`, `/auth/*`, `/dashboard`, `/fixtures/*`, `/live`, `/odds`, `/predictions`, `/models`, `/scrapers`, `/analytics`, `/paper`, `/settings`, `/workspace`, `/admin`, `/sports/*`, `/betslip` |
+
+The route groups make the split explicit: `(public)` is pre-rendered, `(app)` is the authenticated workspace and
+`src/routes/api` plus `src/routes/auth` are the never-static backend surface. `npm run build` fails the pipeline if
+the expected static pages are missing from `.svelte-kit/cloudflare`, and `npm run production:verify` checks the live
+domain afterwards.
+
+### Visual asset pipeline
+
+Landing-page artwork is generated once and then treated as a versioned asset:
+
+```text
+src/lib/data/landing-media.json   one row per visual: id, placement, alt text, keywords
+design-assets/generated-source/    raw PNG sources (not deployed)
+static/images/generated/           optimised WebP masters (1536-class, q82)
+static/images/responsive/          640w and 1024w derivatives
+static/banners/{svg,webp}/         branded navigation-banner artwork
+```
+
+`scripts/check-asset-uniqueness.mjs` fails the build when a visual is reused across two placements, when two masters
+are byte- or perceptually identical, or when a banner repeats an id, inscription, artwork or route.
+
+### Betslip builder
+
+`/betslip` assembles priced selections into an accumulator: combined odds and model probability are computed from the
+engine, the stake plan is Kelly-based, and the slip can be downloaded as a PNG or JSON file or shared as a link
+(`/betslip?slip=…`) that restores the same legs on any device.
 
 ### Convex (optional production backend)
 

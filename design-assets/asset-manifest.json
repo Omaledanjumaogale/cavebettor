@@ -1,0 +1,201 @@
+{
+  "generatedBy": "agnes-image-2.5-flash",
+  "generatedAt": "2026-11-24T07:06:36.116Z",
+  "assets": [
+    {
+      "id": "hero-command-centre",
+      "file": "hero-command-centre",
+      "group": "hero",
+      "placement": "landing.hero",
+      "alt": "The CaveBettor command centre glowing on a wide desk at night, abstract probability panels in lime and mint.",
+      "caption": "The command centre",
+      "keywords": [
+        "One workspace"
+      ],
+      "source": "design-assets\\generated-source\\hero-command-centre.png",
+      "regenerated": false
+    },
+    {
+      "id": "promo-slide-01",
+      "file": "promo-slide-01",
+      "group": "slider",
+      "placement": "landing.slider.slide-1",
+      "alt": "Two analysts comparing model probabilities against bookmaker prices on wide screens at night.",
+      "caption": "Seventeen models, one board",
+      "keywords": [
+        "Model ensemble",
+        "Eight-book pricing",
+        "Naira staking"
+      ],
+      "source": "design-assets\\generated-source\\promo-slide-01.png",
+      "regenerated": false
+    },
+    {
+      "id": "promo-slide-02",
+      "file": "promo-slide-02",
+      "group": "slider",
+      "placement": "landing.slider.slide-2",
+      "alt": "A floodlit football stadium seen through drifting fog with the pitch glowing.",
+      "caption": "Every league, one place",
+      "keywords": [
+        "NPFL",
+        "Premier League",
+        "NBA",
+        "ATP"
+      ],
+      "source": "design-assets\\generated-source\\promo-slide-02.png",
+      "regenerated": false
+    },
+    {
+      "id": "promo-slide-03",
+      "file": "promo-slide-03",
+      "group": "slider",
+      "placement": "landing.slider.slide-3",
+      "alt": "Close-up of a basketball and baseball resting on a dark analysis desk beside a tablet.",
+      "caption": "Sport-specific markets",
+      "keywords": [
+        "Goals",
+        "Points",
+        "Runs",
+        "Sets"
+      ],
+      "source": "design-assets\\generated-source\\promo-slide-03.png",
+      "regenerated": false
+    },
+    {
+      "id": "story-customer",
+      "file": "story-customer",
+      "group": "story",
+      "placement": "landing.story.stage-1",
+      "alt": "A focused football analyst in Lagos studying a phone before a match.",
+      "caption": "Stage one — the analyst",
+      "keywords": [
+        "The customer"
+      ],
+      "source": "design-assets\\generated-source\\story-customer.png",
+      "regenerated": false
+    },
+    {
+      "id": "story-challenge",
+      "file": "story-challenge",
+      "group": "story",
+      "placement": "landing.story.stage-2",
+      "alt": "A person surrounded by conflicting odds boards and paper notes in dim light.",
+      "caption": "Stage two — the noise",
+      "keywords": [
+        "Disconnected tools"
+      ],
+      "source": "design-assets\\generated-source\\story-challenge.png",
+      "regenerated": false
+    },
+    {
+      "id": "story-discovery",
+      "file": "story-discovery",
+      "group": "story",
+      "placement": "landing.story.stage-3",
+      "alt": "A calm desk with a single clean probability chart glowing on a wide monitor.",
+      "caption": "Stage three — the signal",
+      "keywords": [
+        "Edge detection"
+      ],
+      "source": "design-assets\\generated-source\\story-discovery.png",
+      "regenerated": false
+    },
+    {
+      "id": "story-guide",
+      "file": "story-guide",
+      "group": "story",
+      "placement": "landing.story.stage-4",
+      "alt": "A command-centre dashboard glowing on a desk, deep green interface light.",
+      "caption": "Stage four — the desk",
+      "keywords": [
+        "Command centre"
+      ],
+      "source": "design-assets\\generated-source\\story-guide.png",
+      "regenerated": false
+    },
+    {
+      "id": "story-experience",
+      "file": "story-experience",
+      "group": "story",
+      "placement": "landing.story.stage-5",
+      "alt": "Hands building a multi-leg slip on a tablet showing price comparisons.",
+      "caption": "Stage five — the slip",
+      "keywords": [
+        "Betslip builder"
+      ],
+      "source": "design-assets\\generated-source\\story-experience.png",
+      "regenerated": false
+    },
+    {
+      "id": "story-outcome",
+      "file": "story-outcome",
+      "group": "story",
+      "placement": "landing.story.stage-6",
+      "alt": "A satisfied analyst reviewing a bankroll chart that trends upward on a laptop.",
+      "caption": "Stage six — the record",
+      "keywords": [
+        "Paper ledger"
+      ],
+      "source": "design-assets\\generated-source\\story-outcome.png",
+      "regenerated": false
+    },
+    {
+      "id": "feature-learning",
+      "file": "feature-learning",
+      "group": "feature",
+      "placement": "landing.features.learning",
+      "alt": "An open notebook of model notes beside training charts on a dark desk.",
+      "caption": "Models that explain themselves",
+      "keywords": [
+        "Calibration",
+        "Backtesting"
+      ],
+      "source": "design-assets\\generated-source\\feature-learning.png",
+      "regenerated": false
+    },
+    {
+      "id": "feature-workflow",
+      "file": "feature-workflow",
+      "group": "feature",
+      "placement": "landing.features.workflow",
+      "alt": "A calm evening workflow desk with data streams flowing across three monitors.",
+      "caption": "A pipeline, not a spreadsheet",
+      "keywords": [
+        "Collection",
+        "Caching",
+        "Retraining"
+      ],
+      "source": "design-assets\\generated-source\\feature-workflow.png",
+      "regenerated": false
+    },
+    {
+      "id": "feature-community",
+      "file": "feature-community",
+      "group": "feature",
+      "placement": "landing.features.community",
+      "alt": "A group of analysts working together in a Lagos studio around shared screens.",
+      "caption": "Built with the E-WIN ecosystem",
+      "keywords": [
+        "E-WIN",
+        "Shared research"
+      ],
+      "source": "design-assets\\generated-source\\feature-community.png",
+      "regenerated": false
+    },
+    {
+      "id": "dashboard-ecosystem",
+      "file": "dashboard-ecosystem",
+      "group": "feature",
+      "placement": "landing.features.ecosystem",
+      "alt": "Abstract network of linked sport nodes glowing in lime and mint on a dark background.",
+      "caption": "One ecosystem of markets",
+      "keywords": [
+        "Cross-market",
+        "Arbitrage"
+      ],
+      "source": "design-assets\\generated-source\\dashboard-ecosystem.png",
+      "regenerated": false
+    }
+  ]
+}
