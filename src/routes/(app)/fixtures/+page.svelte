@@ -112,42 +112,41 @@
 
   <!-- Filter bar -->
   <div class="panel flex flex-col gap-3 p-3 lg:flex-row lg:items-center">
-    <div class="flex items-center gap-1 overflow-x-auto scrollbar-none">
+    <!-- Status: wraps instead of scrolling, so "Finished" is never hidden -->
+    <div class="flex min-w-0 flex-wrap items-center gap-1 lg:shrink-0 lg:flex-nowrap">
       {#each statuses as s}
         <button
           onclick={() => update({ status: s.id })}
-          class={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${data.filters.status === s.id ? 'bg-lime text-pitch-950' : 'text-fog hover:bg-white/[0.05] hover:text-white'}`}
+          class={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
+            data.filters.status === s.id ? 'bg-lime text-pitch-950' : 'text-fog hover:bg-white/[0.05] hover:text-white'
+          }`}
         >
           {s.label}
         </button>
       {/each}
     </div>
-    <div class="flex items-center gap-1 overflow-x-auto">
-      {#each [
-        { id: 'all', label: 'Anytime' },
-        { id: '1h', label: 'Next 1h' },
-        { id: '3h', label: 'Next 3h' },
-        { id: '6h', label: 'Next 6h' },
-        { id: '12h', label: 'Next 12h' },
-        { id: '24h', label: 'Next 24h' }
-      ] as window}
-        <button
-          onclick={() => update({ within: window.id })}
-          class={`shrink-0 rounded-lg border px-2 py-1.5 text-[10.5px] font-semibold transition ${
-            data.filters.within === window.id
-              ? 'border-mint/35 bg-mint/10 text-mint'
-              : 'border-white/10 text-fog hover:bg-white/[0.05] hover:text-white'
-          }`}
-        >
-          {window.label}
-        </button>
-      {/each}
-    </div>
-    <div class="hidden h-5 w-px bg-white/10 lg:block"></div>
+    <div class="hidden h-5 w-px shrink-0 bg-white/10 lg:block"></div>
+    <!-- Kick-off window as a dropdown: it used to sit on top of the status row -->
+    <label class="flex shrink-0 items-center gap-1.5 text-[10.5px] text-fog-dim">
+      <span>Kick-off</span>
+      <select
+        value={data.filters.within}
+        onchange={(e) => update({ within: (e.target as HTMLSelectElement).value })}
+        class="input !w-auto !py-2 text-[11px]"
+        aria-label="Filter by kick-off window"
+      >
+        <option value="all">Anytime</option>
+        <option value="1h">Next 1 hour</option>
+        <option value="3h">Next 3 hours</option>
+        <option value="6h">Next 6 hours</option>
+        <option value="12h">Next 12 hours</option>
+        <option value="24h">Next 24 hours</option>
+      </select>
+    </label>
     <select
       value={data.filters.league}
       onchange={(e) => update({ league: (e.target as HTMLSelectElement).value })}
-      class="input !w-auto min-w-[150px] !py-2 text-[11.5px] sm:min-w-[190px]"
+      class="input min-w-0 !py-2 text-[11.5px] lg:!w-auto lg:min-w-[170px]"
       aria-label="Filter by league"
     >
       <option value="all">All competitions ({data.stats.leagues})</option>
@@ -155,12 +154,12 @@
         <option value={league.id}>{league.name} — {league.country} ({league.count})</option>
       {/each}
     </select>
-    <form class="relative ml-auto w-full lg:w-64" onsubmit={(e) => { e.preventDefault(); update({ q: search }); }}>
+    <form class="relative w-full min-w-0 lg:ml-auto lg:w-56" onsubmit={(e) => { e.preventDefault(); update({ q: search }); }}>
       <Search size={13} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fog-dim" />
       <input class="input !py-2 pl-9 text-[11.5px]" placeholder="Team or club…" bind:value={search} />
     </form>
     {#if data.filters.q || data.filters.league !== 'all' || data.filters.status !== 'all' || data.filters.sport !== 'all' || data.filters.within !== 'all'}
-      <button onclick={() => goto('/fixtures', { noScroll: true })} class="btn btn-ghost !px-2.5 !py-1.5 text-[10.5px]"><CircleX size={12} /> Clear</button>
+      <button onclick={() => goto('/fixtures', { noScroll: true })} class="btn btn-ghost shrink-0 !px-2.5 !py-1.5 text-[10.5px]"><CircleX size={12} /> Clear</button>
     {/if}
   </div>
 
