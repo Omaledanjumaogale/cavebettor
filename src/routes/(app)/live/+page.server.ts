@@ -1,27 +1,49 @@
-import { LEAGUE_MAP, SPORTS, TEAM_MAP } from '#lib/data/catalog';
-import { awayTeam, fixtureLeague, homeTeam, resolveTeam } from '#lib/data/registry';
+import { SPORTS } from '#lib/data/catalog';
+import { fixtureLeague, resolveTeam } from '#lib/data/registry';
 import { getPrediction } from '#lib/engine/predictions';
 import { cardOf } from '#lib/snapshot';
 import { liveCards, readSnapshot } from '#lib/server/live';
-import { pageFixtureUniverse } from '#lib/server/feed';
+import { feedMeta, pageFixtureUniverse } from '#lib/server/feed';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-  const [liveSnapshot, universe, cards] = await Promise.all([
-    readSnapshot<any>('live'),
+  const [universe, cards, liveSnapshot, meta] = await Promise.all([
     pageFixtureUniverse(),
-    liveCards()
+    liveCards(),
+    readSnapshot<any>('live'),
+    feedMeta()
   ]);
+
   const fixtures = universe.fixtures;
-  const source = liveSnapshot ?? {
-    live: fixtures.filter((f) => f.status === 'live' || f.status === 'halftime'),
-    recent: fixtures.filter((f) => f.status === 'finished').slice(-6).reverse(),
-    upcoming: fixtures.filter((f) => f.status === 'scheduled').slice(0, 8)
-  };
+  const fromFeed = universe.source === 'provider';
+
+  // Real collected fixtures always win. The Convex snapshot is a fallback for a
+  // cold cache, and the last resort is the local engine so the page never 500s.
+  let liveRows: any[];
+  let recentRows: any[];
+  let upcomingRows: any[];
+  let origin: 'provider' | 'convex' | 'engine';
+
+  if (fromFeed) {
+    origin = 'provider';
+    liveRows = fixtures.filter((f) => f.status === 'live' || f.status === 'halftime');
+    recentRows = fixtures.filter((f) => f.status === 'finished').slice(-8).reverse();
+    upcomingRows = fixtures.filter((f) => f.status === 'scheduled').slice(0, 10);
+  } else if (liveSnapshot?.live?.length || liveSnapshot?.upcoming?.length) {
+    origin = 'convex';
+    liveRows = liveSnapshot.live ?? [];
+    recentRows = liveSnapshot.recent ?? [];
+    upcomingRows = liveSnapshot.upcoming ?? [];
+  } else {
+    origin = 'engine';
+    liveRows = fixtures.filter((f) => f.status === 'live' || f.status === 'halftime');
+    recentRows = fixtures.filter((f) => f.status === 'finished').slice(-8).reverse();
+    upcomingRows = fixtures.filter((f) => f.status === 'scheduled').slice(0, 10);
+  }
 
   const rows = (items: any[]) => items.map((row: any) => ({ fixture: row.fixture ?? row, prediction: row.prediction }));
 
-  const pack = (row: { fixture: (typeof fixtures)[number]; prediction?: any }) => {
+  const pack = (row: { fixture: any; prediction?: any }) => {
     const f = row.fixture;
     const p = row.prediction ?? cards?.[f.id] ?? cardOf(getPrediction(f));
     return {
@@ -37,17 +59,26 @@ export const load: PageServerLoad = async () => {
     };
   };
 
-  const liveRows = rows(source.live);
+  const packedLive = rows(liveRows).map(pack);
+
   return {
-    live: liveRows.map(pack),
-    recent: rows(source.recent).map(pack),
-    upcoming: rows(source.upcoming).map(pack),
+    live: packedLive,
+    recent: rows(recentRows).map(pack),
+    upcoming: rows(upcomingRows).map(pack),
     sports: SPORTS,
+    origin,
+    meta: {
+      updatedAt: meta?.generatedAt ?? null,
+      ageMs: meta?.ageMs ?? null,
+      stale: meta?.stale ?? true,
+      providerFixtures: meta?.fixtureCount ?? 0,
+      leagues: meta?.leagues ?? 0
+    },
     counts: {
-      live: liveRows.length,
-      goals: liveRows.reduce((a: number, r: any) => a + r.fixture.score.home + r.fixture.score.away, 0),
-      value: liveRows.flatMap((r: any) => (r.prediction ?? cards?.[r.fixture.id] ?? cardOf(getPrediction(r.fixture))).valueBets).length,
-      leagues: new Set(liveRows.map((r: any) => r.fixture.leagueId)).size
+      live: packedLive.length,
+      goals: packedLive.reduce((a, m: any) => a + (m.fixture.score?.home ?? 0) + (m.fixture.score?.away ?? 0), 0),
+      value: packedLive.flatMap((m: any) => m.prediction.valueBets).length,
+      leagues: new Set(packedLive.map((m: any) => m.fixture.leagueId)).size
     }
   };
 };

@@ -1,5 +1,7 @@
 import { getAnalytics, getDailyBrief, getDashboard } from '#lib/engine/analytics';
 import { LEAGUES, MODELS, DATA_SOURCES, TEAM_MAP, LEAGUE_MAP } from '#lib/data/catalog';
+import { awayTeam, fixtureLeague, homeTeam } from '#lib/data/registry';
+import { feedMeta, mergedFixtures, sportCounts } from '#lib/server/feed';
 import { readSnapshot } from '#lib/server/live';
 import type { PageServerLoad } from './$types';
 
@@ -18,6 +20,36 @@ export const load: PageServerLoad = async () => {
   const snap = await readSnapshot<DashboardSnapshot>('dashboard');
   const dashboard = getDashboard();
   const analytics = getAnalytics();
+  const [wireSet, wireMeta] = await Promise.all([mergedFixtures(), feedMeta()]);
+
+  // The wire is the real collected provider snapshot; every number below is
+  // derived from it, so the dashboard cannot drift back to mock data.
+  const wireLive = wireSet.fixtures
+    .filter((f) => f.status === 'live' || f.status === 'halftime')
+    .slice(0, 8)
+    .map((f) => ({
+      id: f.id,
+      sport: f.sport,
+      home: homeTeam(f)?.name ?? f.homeId,
+      away: awayTeam(f)?.name ?? f.awayId,
+      homeScore: f.score.home,
+      awayScore: f.score.away,
+      minute: f.minute ?? null,
+      period: f.period ?? '',
+      league: fixtureLeague(f)?.name ?? f.leagueId,
+      kickoff: f.kickoff
+    }));
+  const wire = {
+    source: wireSet.source,
+    providerFixtures: wireSet.providerCount,
+    total: wireSet.fixtures.length,
+    liveNow: wireLive.length,
+    updatedAt: wireMeta?.generatedAt ?? null,
+    ageMs: wireMeta?.ageMs ?? null,
+    stale: wireMeta?.stale ?? true,
+    sports: sportCounts(wireSet.fixtures),
+    live: wireLive
+  };
 
   const counts = snap?.counts ?? dashboard.counts;
   const metrics = snap?.metrics ?? dashboard.metrics;
@@ -44,6 +76,7 @@ export const load: PageServerLoad = async () => {
     counts,
     metrics,
     curve,
+    wire,
     live,
     upcoming,
     valueBets: valueBets.map((v: any) => ({

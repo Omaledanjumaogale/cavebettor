@@ -47,6 +47,15 @@
       </div>
       <h1 class="display text-[22px] font-bold tracking-tight text-white sm:text-[26px]">In-play intelligence</h1>
       <p class="mt-1 text-[12.5px] text-fog">Re-priced every 30 seconds. Probabilities account for score, minute and remaining scoring rate.</p>
+      <div class="mt-2 flex flex-wrap items-center gap-2 text-[10.5px] text-fog-dim">
+        <span class="chip {data.origin === 'provider' ? 'chip-lime' : 'chip-amber'}">
+          {data.origin === 'provider' ? 'API-Sports live feed' : data.origin === 'convex' ? 'cached snapshot' : 'engine fallback'}
+        </span>
+        {#if data.meta.updatedAt}
+          <span class="flex items-center gap-1"><Clock size={10} /> synced {relativeTime(data.meta.updatedAt)}</span>
+        {/if}
+        <span class="num">{data.meta.providerFixtures} fixtures · {data.meta.leagues} competitions on file</span>
+      </div>
     </div>
     <div class="flex w-full items-center gap-2 sm:w-auto">
       <button onclick={() => (auto = !auto)} class={`btn btn-ghost !py-2 text-[11px] ${auto ? '!border-mint/30 !text-mint' : ''}`}>

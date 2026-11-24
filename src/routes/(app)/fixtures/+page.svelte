@@ -4,7 +4,6 @@
   import { CalendarDays, Search, LayoutGrid, List, SlidersHorizontal, ChevronRight, Radio, Sparkles, CircleX } from '@lucide/svelte';
   import FixtureCard from '#lib/components/FixtureCard.svelte';
   import MatchRow from '#lib/components/MatchRow.svelte';
-  import { LEAGUE_MAP } from '#lib/data/catalog';
   import { formatDate } from '#lib/format';
 
   let { data } = $props();
@@ -25,6 +24,7 @@
       status: data.filters.status,
       q: data.filters.q,
       view: data.filters.view,
+      day: data.filters.day,
       ...patch
     });
     for (const [k, v] of [...params.entries()]) {
@@ -32,6 +32,16 @@
     }
     goto(`/fixtures${params.size ? `?${params}` : ''}`, { keepFocus: true, noScroll: true });
   }
+
+  const freshness = $derived.by(() => {
+    const age = data.feed.ageMs;
+    if (age === null) return 'awaiting first collection';
+    const mins = Math.round(age / 60_000);
+    if (mins < 1) return 'updated just now';
+    if (mins < 60) return `updated ${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    return `updated ${hours}h ago`;
+  });
 
   function onSearch(e: Event) {
     update({ q: (e.target as HTMLInputElement).value });
@@ -48,6 +58,13 @@
   });
 
   const sportLeagues = $derived(data.leagues.filter((l: any) => data.filters.sport === 'all' || l.sport === data.filters.sport));
+
+  const dayLabel = (iso: string) => {
+    if (iso === data.today) return 'Today';
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    if (iso === tomorrow) return 'Tomorrow';
+    return formatDate(`${iso}T12:00:00Z`, { weekday: 'short', day: 'numeric', month: 'short' });
+  };
 </script>
 
 <svelte:head><title>Fixtures & predictions — CaveBettor</title></svelte:head>
@@ -60,7 +77,16 @@
       </div>
       <h1 class="display text-[22px] font-bold tracking-tight text-white sm:text-[26px]">Every match. Every market.</h1>
       <p class="mt-1 text-[12.5px] text-fog">
-        {data.fixtures.length} fixtures shown of {data.total} across five sports. Probabilities are ensemble estimates — tap a match for the full read.
+        {data.filteredTotal} fixtures match, of {data.total} in the universe · {data.stats.live} live · {data.stats.upcoming} upcoming · {data.stats.finished} finished
+      </p>
+      <p class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-fog-dim">
+        <span class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${data.feed.source === 'provider' ? 'border-mint/30 bg-mint/10 text-mint' : 'border-amber/30 bg-amber/10 text-amber'}`}>
+          <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
+          {data.feed.source === 'provider' ? 'Live provider feed' : 'Engine fallback'}
+        </span>
+        <span>{data.stats.leagues} competitions</span>
+        <span class="h-1 w-1 rounded-full bg-fog-dim"></span>
+        <span>{freshness}</span>
       </p>
     </div>
     <div class="flex w-full items-center gap-1 rounded-xl border border-white/10 bg-white/[0.025] p-1 sm:w-auto">
@@ -99,12 +125,12 @@
     <select
       value={data.filters.league}
       onchange={(e) => update({ league: (e.target as HTMLSelectElement).value })}
-      class="input !w-auto min-w-[150px] !py-2 text-[11.5px] sm:min-w-[170px]"
+      class="input !w-auto min-w-[150px] !py-2 text-[11.5px] sm:min-w-[190px]"
       aria-label="Filter by league"
     >
-      <option value="all">All competitions</option>
+      <option value="all">All competitions ({data.stats.leagues})</option>
       {#each sportLeagues as league}
-        <option value={league.id}>{league.shortName} — {league.country}</option>
+        <option value={league.id}>{league.name} — {league.country} ({league.count})</option>
       {/each}
     </select>
     <form class="relative ml-auto w-full lg:w-64" onsubmit={(e) => { e.preventDefault(); update({ q: search }); }}>
@@ -114,6 +140,13 @@
     {#if data.filters.q || data.filters.league !== 'all' || data.filters.status !== 'all' || data.filters.sport !== 'all'}
       <button onclick={() => goto('/fixtures', { noScroll: true })} class="btn btn-ghost !px-2.5 !py-1.5 text-[10.5px]"><CircleX size={12} /> Clear</button>
     {/if}
+  </div>
+
+  <div class="scrollbar-none flex items-center gap-1.5 overflow-x-auto pb-0.5">
+    <button onclick={() => update({ day: 'all' })} class={`chip shrink-0 ${data.filters.day === 'all' ? '!border-lime/35 !bg-lime/10 !text-lime' : 'hover:!bg-white/[0.07]'}`}>Every day</button>
+    {#each data.days as d}
+      <button onclick={() => update({ day: d })} class={`chip shrink-0 ${data.filters.day === d ? '!border-lime/35 !bg-lime/10 !text-lime' : 'hover:!bg-white/[0.07]'}`}>{dayLabel(d)}</button>
+    {/each}
   </div>
 
   {#if data.fixtures.length === 0}
@@ -151,6 +184,22 @@
           <MatchRow fixture={item.fixture} prediction={item.prediction} />
         {/each}
       {/each}
+    </div>
+  {/if}
+
+  {#if data.pageCount > 1}
+    <div class="flex items-center justify-center gap-2 pb-4">
+      <button
+        class="btn btn-ghost !py-1.5 text-[11px]"
+        disabled={data.page <= 1}
+        onclick={() => update({ page: String(data.page - 1) })}
+      >Previous</button>
+      <span class="num text-[11px] text-fog">Page {data.page} of {data.pageCount}</span>
+      <button
+        class="btn btn-ghost !py-1.5 text-[11px]"
+        disabled={data.page >= data.pageCount}
+        onclick={() => update({ page: String(data.page + 1) })}
+      >Next</button>
     </div>
   {/if}
 </div>

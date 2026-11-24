@@ -64,7 +64,8 @@
       </div>
       <h1 class="display text-[22px] font-bold tracking-tight text-white sm:text-[30px]">{greeting}, Omale.</h1>
       <p class="mt-1 max-w-2xl text-[12.5px] text-fog">
-        {data.counts.fixtures} fixtures scanned across {data.counts.leagues} competitions. {data.counts.live} live now,
+        {data.wire.total} fixtures on the wire from {data.wire.providerFixtures} provider rows across
+        {Object.values(data.wire.sports).filter((n) => n > 0).length} sports. {data.wire.liveNow} live now,
         {data.counts.valueBets ?? data.valueBets.length} selections clear the edge threshold.
       </p>
     </div>
@@ -75,6 +76,45 @@
       </button>
       <a href="/predictions" class="btn btn-primary flex-1 !py-2 text-[11.5px] sm:flex-none"><Sparkles size={13} /> Open value board</a>
     </div>
+  </div>
+
+  <!-- Live wire: real collected fixtures, not mock rows -->
+  <div class="panel overflow-hidden">
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] px-3.5 py-2.5">
+      <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]">
+        <Radio size={12} class="text-rose" /> Live wire
+        <span class="chip {data.wire.source === 'provider' ? 'chip-lime' : 'chip-amber'}">
+          {data.wire.source === 'provider' ? 'API-Sports' : 'engine fallback'}
+        </span>
+      </div>
+      <div class="flex items-center gap-3 text-[10.5px] text-fog-dim">
+        <span class="num">{data.wire.liveNow} in play</span>
+        <span class="h-1 w-1 rounded-full bg-fog-dim"></span>
+        <span>{data.wire.updatedAt ? `synced ${relativeTime(data.wire.updatedAt)}` : 'awaiting first sync'}</span>
+        <a href="/fixtures" class="flex items-center gap-1 text-lime hover:underline">All fixtures <ChevronRight size={11} /></a>
+      </div>
+    </div>
+    {#if data.wire.live.length}
+      <div class="grid divide-y divide-white/[0.05] sm:grid-cols-2 sm:divide-y-0">
+        {#each data.wire.live as match}
+          <a href={`/fixtures/${match.id}`} class="flex items-center justify-between gap-3 px-3.5 py-2.5 transition hover:bg-white/[0.03]">
+            <div class="min-w-0">
+              <div class="truncate text-[12px] font-medium text-white">{match.home} <span class="text-fog-dim">vs</span> {match.away}</div>
+              <div class="truncate text-[10.5px] text-fog-dim">{match.league}</div>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="num text-[13px] font-bold text-lime">{match.homeScore}–{match.awayScore}</span>
+              <span class="chip chip-rose !px-1.5 !py-0.5 !text-[9.5px]">{match.minute ? `${match.minute}'` : match.period || 'LIVE'}</span>
+            </div>
+          </a>
+        {/each}
+      </div>
+    {:else}
+      <div class="px-3.5 py-4 text-[11.5px] text-fog">
+        Nothing is in play at this second. The collector re-sweeps live scores every minute — the
+        <a href="/fixtures" class="text-lime hover:underline">fixture board</a> still lists the full window.
+      </div>
+    {/if}
   </div>
 
   {#if refreshNote}

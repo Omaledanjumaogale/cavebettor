@@ -14,9 +14,14 @@ export const load: PageServerLoad = async ({ url }) => {
   const fixtures = universe.fixtures;
   const cardFor = (fixture: (typeof fixtures)[number]) => cards?.[fixture.id] ?? cardOf(getPrediction(fixture));
 
+  // Only trust cached board rows that still exist in the current fixture
+  // universe; anything else is stale mock data and gets recomputed below.
+  const universeIds = new Set(fixtures.map((f) => f.id));
+  const liveBoard = (board ?? []).filter((bet: any) => bet.fixture && universeIds.has(bet.fixture.id));
+
   const bets: any[] = [];
-  if (board?.length) {
-    for (const bet of board) {
+  if (liveBoard.length) {
+    for (const bet of liveBoard) {
       const fixture = bet.fixture;
       if (!fixture || fixture.status === 'finished') continue;
       if (sport !== 'all' && fixture.sport !== sport) continue;
