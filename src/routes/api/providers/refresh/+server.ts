@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { syncSecret } from '#lib/server/live';
-import { feedMeta, mergedFixtures, refreshProviderFeed, refreshLiveNow } from '#lib/server/feed';
-import { recentProviderCalls } from '#lib/server/providers/apiFootball';
+import { FEED_SPORTS, feedMeta, mergedFixtures, refreshProviderFeed, refreshLiveNow } from '#lib/server/feed';
 import { refreshMarketPrices } from '#lib/server/providers/marketFeed';
 import { apiFootballSportUsage, budgetSnapshot } from '#lib/server/providers/budget';
+import { recentProviderCalls, type ApiFootballSport } from '#lib/server/providers/apiFootball';
 import type { RequestHandler } from './$types';
 
 export const prerender = false;
@@ -19,17 +19,23 @@ function authorised(request: Request): boolean {
 const FULL_REFRESH_AFTER = 6 * 3600_000;
 const LIVE_SWEEP_AFTER = 12 * 60_000;
 
+function parseSport(value: string | null | undefined): ApiFootballSport | null {
+  const sport = (value ?? '').trim().toLowerCase();
+  return (FEED_SPORTS as string[]).includes(sport) ? (sport as ApiFootballSport) : null;
+}
+
 /**
- * Decide what the collector should spend this tick.
+ * Decide what the collector should spend on this tick.
  *
  * The API-Sports plan allows 100 requests a day for the whole account, so the
  * live sweep is paced against the clock: it only runs while the remaining
  * allowance is ahead of an even burn across the day. That spreads live scores
  * over the full 24 hours instead of exhausting the plan by mid-morning.
  */
-async function autoPlan(): Promise<{ mode: 'full' | 'live' | 'idle'; reason: string }> {
+async function autoPlan(sport?: ApiFootballSport | null): Promise<{ mode: 'full' | 'live' | 'idle'; reason: string }> {
   const meta = await feedMeta();
   if (!meta || !meta.fixtureCount) return { mode: 'full', reason: 'no cached feed yet' };
+  if (sport && !meta.sports?.[sport]) return { mode: 'full', reason: `${sport} has no collected fixtures yet` };
   if (meta.ageMs > FULL_REFRESH_AFTER) return { mode: 'full', reason: 'fixture window older than 6h' };
   if (meta.ageMs < LIVE_SWEEP_AFTER) return { mode: 'idle', reason: 'feed is fresh' };
 
@@ -52,20 +58,15 @@ async function autoPlan(): Promise<{ mode: 'full' | 'live' | 'idle'; reason: str
 /**
  * GET /api/providers/refresh — read-only view of the collector state.
  */
-export const GET: RequestHandler = async () => {
-  const [snapshot, sports, meta, plan] = await Promise.all([
-    budgetSnapshot(),
-    apiFootballSportUsage(),
-    feedMeta(),
-    autoPlan()
-  ]);
+export const GET: RequestHandler = async ({ url }) => {
+  const plan = await autoPlan(parseSport(url.searchParams.get('sport')));
+  const [snapshot, sports, meta] = await Promise.all([budgetSnapshot(), apiFootballSportUsage(), feedMeta()]);
   return json({
     ok: true,
     feed: meta,
     plan,
     budgets: snapshot,
     apiFootballBySport: sports,
-    providerCalls: recentProviderCalls(),
     note: 'Provider calls only happen from the scheduled collector or the guarded background revalidation. Page loads read the R2 cache.'
   });
 };
@@ -75,7 +76,9 @@ export const GET: RequestHandler = async () => {
  *
  * Called by the scheduled collection worker and by the owner console. Omit the
  * body to let the budget planner decide; force a mode with `{ mode: 'full' }`
- * or `{ mode: 'live' }`. Every provider call is still gated by the ledger.
+ * or `{ mode: 'live' }`. Pass `sport` to scope the run to one sport, which the
+ * collector does so each invocation stays inside the Workers subrequest cap.
+ * Every provider call is still gated by the ledger.
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
   const allowed = authorised(request) || locals.user?.role === 'super_admin';
@@ -83,11 +86,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   const body = (await request.json().catch(() => ({}))) as {
     mode?: 'full' | 'live' | 'auto';
+    sport?: string;
     fixtures?: boolean;
     live?: boolean;
     markets?: boolean;
     liveOnly?: boolean;
   };
+
+  const sport = parseSport(body.sport);
+  if (body.sport && !sport) {
+    return json({ ok: false, error: `Unknown sport "${body.sport}". Use one of ${FEED_SPORTS.join(', ')}.` }, { status: 400 });
+  }
+  const sports = sport ? [sport] : undefined;
 
   let mode: 'full' | 'live' | 'idle' = 'full';
   let reason = 'explicit request';
@@ -96,7 +106,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   } else if (body.mode === 'live' || body.liveOnly === true || body.live === true) {
     mode = 'live';
   } else {
-    const plan = await autoPlan();
+    const plan = await autoPlan(sport);
     mode = plan.mode;
     reason = plan.reason;
   }
@@ -106,9 +116,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   let liveRows = 0;
 
   if (mode === 'full') {
-    feed = await refreshProviderFeed();
+    feed = await refreshProviderFeed({ sports });
   } else if (mode === 'live') {
-    liveRows = await refreshLiveNow();
+    liveRows = await refreshLiveNow({ sports });
     feed = await feedMeta();
   }
 
@@ -121,17 +131,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     markets = { provider: bundle.provider, prices: bundle.prices.length };
   }
 
-  const [snapshot, sports, meta] = await Promise.all([budgetSnapshot(), apiFootballSportUsage(), feedMeta()]);
+  const [snapshot, sportsUsage, meta] = await Promise.all([budgetSnapshot(), apiFootballSportUsage(), feedMeta()]);
 
   return json({
     ok: true,
     mode,
     reason,
+    sport: sport ?? 'all',
     liveRows,
     feed: feed ?? meta,
     markets,
     budgets: snapshot,
-    apiFootballBySport: sports,
+    apiFootballBySport: sportsUsage,
     providerCalls: recentProviderCalls(),
     durationMs: Date.now() - started,
     storage: 'r2',

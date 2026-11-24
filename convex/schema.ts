@@ -392,6 +392,23 @@ export default defineSchema({
    * One tiny row per provider+period so paid API ceilings can never be
    * exceeded. No bulk payloads live here — those are cached in Cloudflare R2.
    */
+  /**
+   * Email + password credentials. Only the PBKDF2 verifier is stored; the
+   * password itself never reaches the database, the logs or the app.
+   */
+  credentials: defineTable({
+    email: v.string(),
+    name: v.string(),
+    hash: v.string(),
+    salt: v.string(),
+    iterations: v.number(),
+    role: v.string(),
+    createdAt: v.number(),
+    lastLoginAt: v.optional(v.number()),
+    failedAttempts: v.optional(v.number()),
+    lockedUntil: v.optional(v.union(v.number(), v.null()))
+  }).index('by_email', ['email']),
+
   providerBudgets: defineTable({
     key: v.string(),
     used: v.number(),

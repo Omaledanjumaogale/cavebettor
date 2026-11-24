@@ -144,6 +144,7 @@ PUBLIC_CONVEX_URL, PUBLIC_CONVEX_SITE_URL, PUBLIC_SITE_URL, PUBLIC_DEMO_MODE,
 EWIN_SITE_URL, EWIN_CONVEX_SITE_URL, CONVEX_HTTP_ACTIONS_URL,
 SESSION_SECRET, ADMIN_SESSION_SECRET, CAVEBETTOR_SYNC_SECRET,
 SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD,
+API_FOOTBALL_KEY, THE_ODDS_API_KEY, ODD_API_KEY,
 AGNES_AI_KEY, AGNES_API_BASE_URL, AGNES_MODEL,
 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
 RESEND_API_KEY, RESEND_FROM_EMAIL,
@@ -157,11 +158,21 @@ Convex deployment: `https://expert-goose-697.eu-west-1.convex.cloud` (HTTP actio
 
 | Route | Purpose |
 | --- | --- |
-| `/auth/login` | Google, GitHub and E-WIN sign-in |
+| `/auth/login` | Email + password, Google, GitHub and E-WIN sign-in |
+| `/auth/register` | Create an email + password account |
 | `/auth/google`, `/auth/github` | OAuth start; callbacks at `/auth/google/callback` and `/auth/github/callback` |
 | `/auth/ewin` | E-WIN Hub SSO (`platform=cavebettor`) |
 | `/auth/admin` | Super-admin password console |
 | `/admin` | Owner console: live sync, users, revenue, integration diagnostics |
+
+Passwords are hashed with PBKDF2-HMAC-SHA256 (210,000 iterations, 16-byte
+per-account salt). That derivation is far more CPU than a Cloudflare Worker
+invocation may spend, so it runs in a Convex action (`convex/passwordActions.ts`)
+and the Worker only ever sees a boolean. In local development and in tests the
+same code path falls back to WebCrypto over the R2 data plane. Only the verifier
+and its parameters are stored. Eight failed attempts against one address lock
+sign-in for 15 minutes, and a failed login never reveals whether an address
+exists.
 
 Register the exact redirect URIs in the Google Cloud and GitHub OAuth consoles:
 
@@ -171,6 +182,32 @@ https://cavebettor.ewinproject.org/auth/github/callback
 ```
 
 The owner console lists these callback URLs and the live status of Convex, Agnes AI, Resend and E-WIN SSO.
+
+### Live fixture collection
+
+Fixtures, scores and competitions come from API-Sports, one request per sport per
+day plus a live sweep. The account-wide free plan allows **100 requests a day**,
+so collection never runs on page traffic:
+
+- `wrangler.collect.jsonc` fires every 15 minutes and `POST`s to
+  `/api/providers/refresh` with the sync secret.
+- That route plans the tick: a full window refresh (`-1…+2` days, all five
+  sports) when the snapshot is older than six hours, otherwise a live sweep —
+  and only while the remaining allowance is ahead of an even burn across the
+  day. Every outbound call is still gated by the budget ledger.
+- Football and the NBA host expose a `live=all` filter; basketball, hockey and
+  baseball do not, so those hosts pull today's slate and the in-play rows are
+  selected locally.
+- The live sweep is cached separately and overlaid on the collected window at
+  read time, so scores and clocks stay current without rewriting ~1,500 rows.
+- `GET /api/providers/refresh` reports the plan, the ledger and the last provider
+  calls. `GET /api/providers/probe?sport=football&mode=live` performs exactly one
+  budgeted call for one sport and returns what came back — the fastest way to
+  prove a silent fallback is not real data (owner or sync-secret only).
+
+When the allowance is spent or a provider errors, the last good snapshot keeps
+serving and every page labels the source (`API-Sports`, `cached snapshot`, or
+`engine fallback`) rather than claiming live data it does not have.
 
 ---
 
@@ -182,7 +219,7 @@ Every integration is optional and independently activated.
 | --- | --- | --- |
 | `PUBLIC_CONVEX_URL` | Reactive production data | Local deterministic engine |
 | `OPENAI_API_KEY` (+`OPENAI_MODEL`) | Grounded match analysis | Deterministic analyst templates |
-| `API_FOOTBALL_KEY` | Fixtures, lineups, injuries, odds | Local feature store |
+| `API_FOOTBALL_KEY` | Fixtures, live scores, lineups, injuries, odds (100 requests/day on the free plan) | Local feature store |
 | `THE_ODDS_API_KEY` | Bookmaker prices and movement | Simulated eight-book market |
 | `SPORTSDB_KEY` | Badges, venues, schedules | Catalogue metadata |
 | `BALLDONTLIE_KEY` | NBA box scores | Local team features |
@@ -199,6 +236,9 @@ GET  /api/predictions/:fixtureId
 GET  /api/odds/:fixtureId
 GET  /api/analysis/:fixtureId
 GET  /api/search?q=
+GET  /api/providers/refresh          collector state, plan and last provider calls
+POST /api/providers/refresh          run a collection tick (sync secret or owner)
+GET  /api/providers/probe?sport=&mode=  one budgeted provider call, one sport
 POST /api/models/train        { "modelId": "mdl_gbm" }
 GET  /api/scrape              capabilities
 POST /api/scrape              { "sourceId": "odds-harvester", "mode": "fixture" }

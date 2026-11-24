@@ -19,7 +19,7 @@
  */
 
 import { env as privateEnv } from '$env/dynamic/private';
-import { readCache, deleteCache, writeCacheIfChanged } from '#lib/server/cache';
+import { readCache, writeCache, deleteCache, writeCacheIfChanged } from '#lib/server/cache';
 import { commitApiFootball, releaseApiFootball, reserveApiFootball } from './budget';
 
 export type ApiFootballSport = 'football' | 'basketball' | 'icehockey' | 'nba' | 'baseball';
@@ -115,6 +115,8 @@ interface FetchOptions {
   ttlMs: number;
   force?: boolean;
   cost?: number;
+  /** Internal retry counter for throttled requests. */
+  attempt?: number;
 }
 
 export interface ProviderFetchResult<T> {
@@ -156,13 +158,47 @@ export function recentProviderCalls(): ProviderCallLogEntry[] {
 }
 
 /**
+ * Minimum gap between two provider calls.
+ *
+ * The free API-Sports plan throttles bursts (a handful of requests per
+ * minute), so a collection run paces itself instead of firing every day-sweep
+ * back to back.
+ */
+const MIN_GAP_MS = 1_300;
+let lastCallAt = 0;
+
+async function pace() {
+  const wait = lastCallAt + MIN_GAP_MS - Date.now();
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  lastCallAt = Date.now();
+}
+
+const PLAN_FLOOR_KEY = 'api-football/plan-floor';
+
+/**
+ * The free plan rejects dates before a rolling boundary. When the provider
+ * says which date is allowed, remember it so later runs skip the dead days
+ * instead of burning a request to rediscover them.
+ */
+async function rememberPlanFloor(detail: string): Promise<void> {
+  const match = /try from (\d{4}-\d{2}-\d{2})/i.exec(detail);
+  if (!match) return;
+  await writeCache(PLAN_FLOOR_KEY, match[1], 12 * 3600_000, 'api-football');
+}
+
+export async function planFloor(): Promise<string | null> {
+  const cached = await readCache<string>(PLAN_FLOOR_KEY, true);
+  return typeof cached?.value === 'string' ? cached.value : null;
+}
+
+/**
  * Perform a budgeted API-Sports read.
  *
  * Returns `null` when the daily ceiling would be exceeded — callers then fall
  * back to the cached payload or the local engine.
  */
 export async function apiFootballFetch<T>(options: FetchOptions): Promise<ProviderFetchResult<T> | null> {
-  const { sport, path, params = {}, ttlMs, force = false, cost = 1 } = options;
+  const { sport, path, params = {}, ttlMs, force = false, cost = 1, attempt = 1 } = options;
   const cacheKey = `api-football/${sport}/${path}/${JSON.stringify(params)}`;
 
   if (!force) {
@@ -179,6 +215,8 @@ export async function apiFootballFetch<T>(options: FetchOptions): Promise<Provid
 
   const allowance = await sportAllowance(sport);
   if (allowance <= 0) return null;
+
+  await pace();
 
   const permission = await reserveApiFootball(sport, cost);
   if (!permission) {
@@ -218,9 +256,19 @@ export async function apiFootballFetch<T>(options: FetchOptions): Promise<Provid
     const json = (await res.json()) as ApiFootballEnvelope<T>;
     if (providerErrors(json.errors)) {
       const detail = JSON.stringify(json.errors).slice(0, 200);
+      await rememberPlanFloor(detail);
       console.warn(`[api-football] ${sport} ${path} -> provider errors ${detail}`);
       recordCall({ at: new Date().toISOString(), sport, path, params: paramsSeen, outcome: 'provider-error', status: res.status, detail, ms: Date.now() - startedAt });
       await releaseApiFootball(sport, cost);
+
+      // The free plan also throttles bursts. A short pause and one retry keeps
+      // a collection run complete instead of silently dropping a day.
+      const throttled = /rate ?limit|too many requests/i.test(detail);
+      if (throttled && attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 3_000 * attempt));
+        return apiFootballFetch<T>({ ...options, force: true, attempt: attempt + 1 });
+      }
+
       const fallback = await readCache<T>(cacheKey, true);
       if (fallback && fallback.value != null) {
         return { data: fallback.value, source: 'cache', cachedAt: fallback.storedAt, requestsUsed: 0 };

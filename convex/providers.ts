@@ -1,4 +1,5 @@
 import { v } from 'convex/values';
+import { internal } from './_generated/api';
 import { action, internalMutation, query } from './_generated/server';
 
 /**
@@ -87,10 +88,11 @@ export const collect = action({
       return { ok: false, reason: `Daily API-Football allowance exhausted (${permit.remaining ?? 0} left).` };
     }
 
-    const url = new URL(`https://${host}/fixtures`);
+    const url = new URL(sport === 'football' ? 'https://v3.football.api-sports.io/fixtures' : `https://${host}/games`);
     url.searchParams.set('season', String(season ?? 2025));
     url.searchParams.set('timezone', 'Africa/Lagos');
-    const res = await fetch(url, { headers: { 'x-apikey': apiKey } });
+    // API-Sports only authenticates `x-apisports-key`; `x-apikey` is rejected.
+    const res = await fetch(url, { headers: { 'x-apisports-key': apiKey, accept: 'application/json' } });
     if (!res.ok) {
       return { ok: false, reason: `Provider returned HTTP ${res.status}.` };
     }
@@ -104,7 +106,7 @@ export const collect = action({
       body: JSON.stringify({ source: 'api-football', sport, rows })
     });
 
-    await ctx.runMutation(internal.recordCollection, {
+    await ctx.runMutation(internal.providers.recordCollection, {
       source: 'api-football',
       sport,
       rows: rows.length,

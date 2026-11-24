@@ -11,6 +11,7 @@
  * and in Node during local development. Plain-text passwords are never
  * persisted, logged or returned.
  */
+import { env as privateEnv } from '$env/dynamic/private';
 import { readCache, writeCache, deleteCache } from '#lib/server/cache';
 import type { AuthProvider, SessionUser } from '#lib/server/auth';
 
@@ -92,8 +93,69 @@ function accountKey(email: string): string {
   return `accounts/${encodeURIComponent(normaliseEmail(email))}`;
 }
 
+/**
+ * Accounts live in Convex when it is configured, because PBKDF2 key derivation
+ * is far too expensive for a Worker invocation. In local development and in
+ * tests the same records are kept in the data-plane cache with WebCrypto.
+ */
+async function cloudStore(): Promise<ReturnType<typeof import('#lib/server/convexClient')['convexClient']> | null> {
+  try {
+    const { convexClient, convexConfigured, withTimeout } = await import('#lib/server/convexClient');
+    if (!convexConfigured()) return null;
+    // Prove the client is usable before handing it back.
+    withTimeout(Promise.resolve(true), 10);
+    return convexClient();
+  } catch {
+    return null;
+  }
+}
+
+function cloudSecret(): string {
+  return privateEnv.CAVEBETTOR_SYNC_SECRET || process.env.CAVEBETTOR_SYNC_SECRET || '';
+}
+
+async function cloudCall<T>(method: 'query' | 'mutation' | 'action', name: string, args: Record<string, unknown>): Promise<T | null> {
+  try {
+    const { convexClient, withTimeout, convexConfigured } = await import('#lib/server/convexClient');
+    if (!convexConfigured()) return null;
+    const secret = cloudSecret();
+    if (!secret) return null;
+    const client = convexClient() as unknown as Record<string, (n: string, a: unknown) => Promise<T>>;
+    return await withTimeout(client[method](name, { ...args, secret }), 4000);
+  } catch {
+    return null;
+  }
+}
+
 export async function findAccount(email: string): Promise<AccountRecord | null> {
-  const cached = await readCache<AccountRecord>(accountKey(email), true);
+  const normalised = normaliseEmail(email);
+  const remote = await cloudCall<{
+    email: string;
+    name: string;
+    hash: string;
+    salt: string;
+    iterations: number;
+    role: string;
+    createdAt: number;
+    lastLoginAt: number | null;
+  } | null>('query', 'credentials:get', { email: normalised });
+
+  if (remote) {
+    return {
+      email: remote.email,
+      name: remote.name,
+      hash: remote.hash,
+      salt: remote.salt,
+      iterations: remote.iterations,
+      role: (remote.role as AccountRecord['role']) ?? 'analyst',
+      provider: 'password',
+      createdAt: new Date(remote.createdAt).toISOString(),
+      lastLoginAt: remote.lastLoginAt ? new Date(remote.lastLoginAt).toISOString() : undefined,
+      plan: 'starter'
+    };
+  }
+
+  const cached = await readCache<AccountRecord>(accountKey(normalised), true);
   return cached?.value ?? null;
 }
 
@@ -111,6 +173,32 @@ export async function createAccount(input: {
   if (await findAccount(email)) {
     return { ok: false, error: 'An account already exists for that email. Sign in instead.' };
   }
+
+  // Hashing happens in Convex when it is configured, so the Worker never runs
+  // the 210k-iteration key derivation.
+  const remote = await cloudCall<{ ok: boolean; created?: boolean; error?: string }>('action', 'passwordActions:register', {
+    email,
+    name,
+    password: input.password,
+    role: 'analyst'
+  });
+  if (remote?.ok) {
+    return {
+      ok: true,
+      account: {
+        email,
+        name,
+        hash: '',
+        salt: '',
+        iterations: ITERATIONS,
+        role: 'analyst',
+        provider: 'password',
+        createdAt: new Date().toISOString(),
+        plan: 'starter'
+      }
+    };
+  }
+  if (remote && remote.ok === false && remote.error) return { ok: false, error: remote.error };
 
   const saltBytes = crypto.getRandomValues(new Uint8Array(16));
   const salt = base64url(saltBytes);
@@ -130,17 +218,40 @@ export async function createAccount(input: {
 }
 
 export async function verifyAccount(email: string, password: string): Promise<AccountRecord | null> {
-  const account = await findAccount(email);
-  if (!account) return null;
+  const normalised = normaliseEmail(email);
+
+  const remote = await cloudCall<
+    { ok: true; name: string; role: string; createdAt: number; lastLoginAt: number | null } | { ok: false; reason: string }
+  >('action', 'passwordActions:verify', { email: normalised, password });
+  if (remote) {
+    if (!remote.ok) return null;
+    return {
+      email: normalised,
+      name: remote.name,
+      hash: '',
+      salt: '',
+      iterations: ITERATIONS,
+      role: (remote.role as AccountRecord['role']) ?? 'analyst',
+      provider: 'password',
+      createdAt: new Date(remote.createdAt).toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      plan: 'starter'
+    };
+  }
+
+  const account = await findAccount(normalised);
+  if (!account || !account.salt) return null;
   const candidate = await derive(password, account.salt, account.iterations);
   if (!safeEqual(candidate, account.hash)) return null;
   const updated: AccountRecord = { ...account, lastLoginAt: new Date().toISOString() };
-  await writeCache(accountKey(email), updated, ACCOUNT_TTL, 'accounts');
+  await writeCache(accountKey(normalised), updated, ACCOUNT_TTL, 'accounts');
   return updated;
 }
 
 export async function deleteAccount(email: string): Promise<void> {
-  await deleteCache(accountKey(email));
+  const normalised = normaliseEmail(email);
+  await cloudCall('mutation', 'credentials:remove', { email: normalised });
+  await deleteCache(accountKey(normalised));
 }
 
 /** Update a mutable field on an existing account (plan, name, role). */

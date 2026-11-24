@@ -1,5 +1,5 @@
-import { readCache, writeCache, writeCacheIfChanged } from '#lib/server/cache';
-import { fetchSportDay, fetchSportLive, isoDate, type ApiFootballSport } from '#lib/server/providers/apiFootball';
+import { readCache, writeCache } from '#lib/server/cache';
+import { fetchSportDay, fetchSportLive, isoDate, planFloor, type ApiFootballSport } from '#lib/server/providers/apiFootball';
 import { normaliseProviderFixtures } from '#lib/server/providers/normalise';
 import { registerLeague, registerTeam } from '#lib/data/registry';
 import { getFixtures } from '#lib/engine/fixtures';
@@ -89,17 +89,27 @@ function dedupe(fixtures: Fixture[]): Fixture[] {
 }
 
 /**
- * Collect a full provider snapshot. Called by the scheduled worker and by the
+ * Collect a provider snapshot. Called by the scheduled worker and by the
  * guarded background revalidation — never directly by a page load.
+ *
+ * Pass `sports` to scope a run to one sport. The free Workers plan caps
+ * subrequests per invocation, and a whole-window refresh for all five sports
+ * needs more than that, so the collector fans out one invocation per sport.
  */
-export async function refreshProviderFeed(options: { liveOnly?: boolean } = {}): Promise<FeedMeta> {
+export async function refreshProviderFeed(options: { liveOnly?: boolean; sports?: ApiFootballSport[] } = {}): Promise<FeedMeta> {
   const collected: Fixture[] = [];
   const sports: Record<string, number> = {};
   let requests = 0;
 
-  const days = options.liveOnly ? [] : DAY_WINDOW.map((offset) => isoDate(offset));
+  const target = options.sports?.length ? options.sports : FEED_SPORTS;
+  // The free plan rejects dates before a rolling boundary, so the requested
+  // window is clamped to whatever the provider last said was allowed.
+  const floor = options.liveOnly ? null : await planFloor();
+  const days = options.liveOnly
+    ? []
+    : DAY_WINDOW.map((offset) => isoDate(offset)).filter((day) => !floor || day >= floor);
 
-  for (const sport of FEED_SPORTS) {
+  for (const sport of target) {
     for (const day of days) {
       const result = await fetchSportDay(sport, day);
       requests += 1;
@@ -121,22 +131,36 @@ export async function refreshProviderFeed(options: { liveOnly?: boolean } = {}):
     }
   }
 
-  const fixtures = dedupe(collected).sort((a, b) => +new Date(a.kickoff) - +new Date(b.kickoff));
+  // A sport-scoped run only replaces its own slice, so a single-sport tick can
+  // never erase the other sports' window.
+  const previous = options.sports?.length ? await readProviderFixtures() : [];
+  const kept = options.sports?.length ? previous.filter((fixture) => !target.includes(fixture.sport as ApiFootballSport)) : [];
+  const fixtures = dedupe([...kept, ...collected]).sort((a, b) => +new Date(a.kickoff) - +new Date(b.kickoff));
+
+  const previousMeta = await readCache<FeedMeta>(META_KEY, true);
+  const mergedSports: Record<string, number> = options.sports?.length ? { ...(previousMeta?.value?.sports ?? {}), ...sports } : sports;
+  for (const sport of target) if (!mergedSports[sport]) delete mergedSports[sport];
+
   const meta: FeedMeta = {
     generatedAt: new Date().toISOString(),
     fixtureCount: fixtures.length,
     liveCount: fixtures.filter((f) => f.status === 'live' || f.status === 'halftime').length,
     leagues: new Set(fixtures.map((f) => f.leagueId)).size,
-    sports,
-    window: { from: days[0] ?? isoDate(0), to: days[days.length - 1] ?? isoDate(0) },
+    sports: mergedSports,
+    window: {
+      from: previousMeta?.value?.window?.from ?? days[0] ?? isoDate(0),
+      to: days[days.length - 1] ?? previousMeta?.value?.window?.to ?? isoDate(2)
+    },
     requests,
     source: 'api-football'
   };
 
   if (fixtures.length) {
     hydrateRegistry(fixtures);
-    await writeCacheIfChanged(FEED_KEY, fixtures, 6 * 3600_000, 'api-football');
-  }  await writeCache(META_KEY, meta, 6 * 3600_000, 'api-football');
+    // Plain write: reading first would cost a subrequest the free plan cannot spare.
+    await writeCache(FEED_KEY, fixtures, 6 * 3600_000, 'api-football');
+  }
+  await writeCache(META_KEY, meta, 6 * 3600_000, 'api-football');
   return meta;
 }
 
@@ -270,9 +294,10 @@ export function feedRefreshing(): boolean {
 }
 
 /** Sweep every sport's live endpoint and cache the in-play rows. */
-export async function refreshLiveNow(): Promise<number> {
+export async function refreshLiveNow(options: { sports?: ApiFootballSport[] } = {}): Promise<number> {
+  const target = options.sports?.length ? options.sports : FEED_SPORTS;
   const live: Fixture[] = [];
-  for (const sport of FEED_SPORTS) {
+  for (const sport of target) {
     try {
       const result = await fetchSportLive(sport);
       if (!result.rows.length) continue;
@@ -285,7 +310,12 @@ export async function refreshLiveNow(): Promise<number> {
     }
   }
 
-  const fixtures = dedupe(live);
+  if (!live.length) return 0;
+
+  // Keep the other sports' live rows when this run only covers one sport.
+  const previous = options.sports?.length ? await readCache<Fixture[]>(LIVE_KEY, true) : null;
+  const carried = Array.isArray(previous?.value) ? previous.value.filter((row) => !target.includes(row.sport as ApiFootballSport)) : [];
+  const fixtures = dedupe([...carried, ...live]);
   if (fixtures.length) {
     hydrateRegistry(fixtures);
     await writeCache(LIVE_KEY, fixtures, 3 * 3600_000, 'api-football');

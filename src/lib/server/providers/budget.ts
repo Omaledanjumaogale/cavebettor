@@ -109,8 +109,8 @@ function localWrite(key: string, row: LedgerRow) {
 /** Read the persisted ledger row when Convex is configured. */
 async function convexRead(key: string): Promise<LedgerRow | null> {
   try {
-    const { convexClient } = await import('#lib/server/convexClient');
-    const row = await convexClient().query('budget:read' as never, { key } as never);
+    const { convexClient, withTimeout } = await import('#lib/server/convexClient');
+    const row = await withTimeout(convexClient().query('budget:read' as never, { key } as never), 1500);
     if (!row) return null;
     return { used: Number((row as { used?: number }).used ?? 0), reserved: Number((row as { reserved?: number }).reserved ?? 0) };
   } catch {
@@ -125,13 +125,13 @@ type ReserveOutcome =
 
 async function convexReserve(key: string, units: number, limit: number): Promise<ReserveOutcome> {
   try {
-    const { convexClient } = await import('#lib/server/convexClient');
-    const row = (await convexClient().mutation('budget:reserve' as never, {
+    const { convexClient, withTimeout } = await import('#lib/server/convexClient');
+    const row = (await withTimeout(convexClient().mutation('budget:reserve' as never, {
       key,
       units,
       limit,
       secret: ledgerSecret()
-    } as never)) as { used?: number; reserved?: number; exhausted?: boolean } | null;
+    } as never), 1500)) as { used?: number; reserved?: number; exhausted?: boolean } | null;
     if (!row) return { status: 'unavailable' };
     if (row.exhausted) return { status: 'exhausted' };
     return { status: 'granted', row: { used: Number(row.used ?? 0), reserved: Number(row.reserved ?? 0) } };
@@ -142,8 +142,8 @@ async function convexReserve(key: string, units: number, limit: number): Promise
 
 async function convexRelease(key: string, units: number): Promise<void> {
   try {
-    const { convexClient } = await import('#lib/server/convexClient');
-    await convexClient().mutation('budget:release' as never, { key, units, secret: ledgerSecret() } as never);
+    const { convexClient, withTimeout } = await import('#lib/server/convexClient');
+    await withTimeout(convexClient().mutation('budget:release' as never, { key, units, secret: ledgerSecret() } as never), 1500);
   } catch {
     /* ledger stays authoritative in memory for this process */
   }
@@ -225,8 +225,8 @@ export async function commit(provider: ProviderId, units = 1): Promise<void> {
   const current = localRead(key);
   localWrite(key, { used: current.used + units, reserved: Math.max(0, current.reserved - units) });
   try {
-    const { convexClient } = await import('#lib/server/convexClient');
-    await convexClient().mutation('budget:commit' as never, { key, units, secret: ledgerSecret() } as never);
+    const { convexClient, withTimeout } = await import('#lib/server/convexClient');
+    await withTimeout(convexClient().mutation('budget:commit' as never, { key, units, secret: ledgerSecret() } as never), 1500);
   } catch {
     /* keep local accounting */
   }
@@ -238,12 +238,15 @@ export async function commitApiFootball(sport: string, units = 1): Promise<void>
   const current = localRead(sportKey);
   localWrite(sportKey, { used: current.used + units, reserved: Math.max(0, current.reserved - units) });
   try {
-    const { convexClient } = await import('#lib/server/convexClient');
-    await convexClient().mutation('budget:commit' as never, {
-      key: sportKey,
-      units,
-      secret: ledgerSecret()
-    } as never);
+    const { convexClient, withTimeout } = await import('#lib/server/convexClient');
+    await withTimeout(
+      convexClient().mutation('budget:commit' as never, {
+        key: sportKey,
+        units,
+        secret: ledgerSecret()
+      } as never),
+      1500
+    );
   } catch {
     /* local accounting remains authoritative for this process */
   }
@@ -319,12 +322,15 @@ export async function releaseApiFootball(sport: string, units = 1): Promise<void
   const current = localRead(sportKey);
   localWrite(sportKey, { used: current.used, reserved: Math.max(0, current.reserved - units) });
   try {
-    const { convexClient } = await import('#lib/server/convexClient');
-    await convexClient().mutation('budget:release' as never, {
-      key: sportKey,
-      units,
-      secret: ledgerSecret()
-    } as never);
+    const { convexClient, withTimeout } = await import('#lib/server/convexClient');
+    await withTimeout(
+      convexClient().mutation('budget:release' as never, {
+        key: sportKey,
+        units,
+        secret: ledgerSecret()
+      } as never),
+      1500
+    );
   } catch {
     /* local accounting remains authoritative for this process */
   }
