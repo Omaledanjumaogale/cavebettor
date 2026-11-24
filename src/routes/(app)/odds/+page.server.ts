@@ -62,14 +62,14 @@ export const load: PageServerLoad = async ({ url }) => {
             return main ? main.outcomes.map((o) => o.modelProbability) : [];
           })();
       if (probabilities.length < 2) return null;
-      const labels = probabilities.length === 3 ? [`${home.shortName} win`, 'Draw', `${away.shortName} win`] : [home.shortName, away.shortName];
+      const labels = probabilities.length === 3 ? [`${home.name} win`, 'Draw', `${away.name} win`] : [home.name, away.name];
       const result = arbitrage(probabilities, `${f.id}-arb`);
       return {
         fixtureId: f.id,
         kickoff: f.kickoff,
-        league: fixtureLeague(f).shortName,
-        home: home.shortName,
-        away: away.shortName,
+        league: fixtureLeague(f).name,
+        home: home.name,
+        away: away.name,
         market: probabilities.length === 3 ? 'Match result — 1X2' : 'Moneyline',
         margin: result.margin,
         totalImplied: result.totalImplied,
@@ -83,8 +83,8 @@ export const load: PageServerLoad = async ({ url }) => {
   return {
     fixtures: upcoming.slice(0, 60).map((f) => ({
       id: f.id,
-      label: `${resolveTeam(f.homeId, f.leagueId).shortName} vs ${resolveTeam(f.awayId, f.leagueId).shortName}`,
-      league: fixtureLeague(f).shortName,
+      label: `${resolveTeam(f.homeId, f.leagueId).name} vs ${resolveTeam(f.awayId, f.leagueId).name}`,
+      league: fixtureLeague(f).name,
       kickoff: f.kickoff
     })),
     selected: {
@@ -107,9 +107,9 @@ export const load: PageServerLoad = async ({ url }) => {
     arbs,
     movers: getOddsMovers().map((m) => ({
       fixtureId: m.fixture.id,
-      league: fixtureLeague(m.fixture).shortName,
-      home: resolveTeam(m.fixture.homeId, m.fixture.leagueId).shortName,
-      away: resolveTeam(m.fixture.awayId, m.fixture.leagueId).shortName,
+      league: fixtureLeague(m.fixture).name,
+      home: resolveTeam(m.fixture.homeId, m.fixture.leagueId).name,
+      away: resolveTeam(m.fixture.awayId, m.fixture.leagueId).name,
       selection: m.selection,
       odds: m.odds,
       drift: m.drift,

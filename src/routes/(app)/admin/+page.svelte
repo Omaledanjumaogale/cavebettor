@@ -27,6 +27,8 @@
     </div>
     <div class="flex items-center gap-2">
       <span class={`chip !text-[9px] ${data.live ? 'chip-mint' : 'chip-amber'}`}><Database size={10} /> {data.live ? 'Convex live' : 'Local fallback'}</span>
+      <a href="/admin/shortlist" class="btn btn-ghost !py-2 text-[11px]">Shortlist board</a>
+      <form method="POST" action="?/learn"><button class="btn btn-ghost !py-2 text-[11px]" type="submit"><Cpu size={12} /> Retrain on results</button></form>
       <form method="POST" action="?/sync"><button class="btn !py-2 text-[11px]" type="submit"><Cpu size={12} /> Sync live data</button></form>
       <span class="chip chip-rose"><AlertTriangle size={10} /> Restricted area</span>
     </div>
@@ -35,6 +37,41 @@
   {#if form?.message}
     <div role="status" class={`rounded-xl border p-3 text-[11.5px] ${form.ok ? 'border-mint/30 bg-mint/10 text-mint' : 'border-rose/30 bg-rose/10 text-rose'}`}>{form.message}</div>
   {/if}
+
+  <div class="panel p-4">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h2 class="text-[13px] font-semibold text-white">Continuous learning</h2>
+        <p class="text-[10.5px] text-fog">
+          Every settled fixture is graded against the call that was published for it, then fed back into the probability calibration.
+        </p>
+      </div>
+      {#if data.learning}
+        <div class="flex items-center gap-3 text-[10.5px] text-fog-dim">
+          <span class="chip chip-lime">{data.learning.settled} graded</span>
+          <span class="chip chip-mint">{(data.learning.accuracy * 100).toFixed(1)}% hit rate</span>
+        </div>
+      {/if}
+    </div>
+    {#if data.learning?.buckets?.length}
+      <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {#each data.learning.buckets as bucket}
+          <div class="rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 py-2">
+            <div class="text-[9.5px] uppercase tracking-[0.08em] text-fog-dim">{(bucket.from * 100).toFixed(0)}–{(bucket.to * 100).toFixed(0)}% band</div>
+            <div class="num mt-0.5 text-[13px] font-semibold text-white">{(bucket.observed * 100).toFixed(1)}%</div>
+            <div class="text-[9px] text-fog-dim">observed · {bucket.n} samples</div>
+            <div class={`num text-[9px] ${bucket.factor >= 1 ? 'text-mint' : 'text-rose'}`}>
+              {bucket.factor >= 1 ? '+' : ''}{((bucket.factor - 1) * 100).toFixed(1)}% correction
+            </div>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <p class="mt-3 text-[10.5px] text-fog-dim">
+        No settled fixtures graded yet. Run “Retrain on results” after the next collection to build the calibration table.
+      </p>
+    {/if}
+  </div>
 
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
     {#each [

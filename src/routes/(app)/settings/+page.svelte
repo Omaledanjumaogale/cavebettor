@@ -148,7 +148,7 @@
               </div>
             {/each}
           </div>
-          <p class="mt-2 text-[9.5px] text-fog-dim">Trading Desk plan supports up to 5 seats at ₦5,000 per seat per month.</p>
+          <p class="mt-2 text-[9.5px] text-fog-dim">The Pro plan includes up to 5 seats at ₦5,000 per seat per month.</p>
         </div>
       {:else if tab === 'billing'}
         <div class="panel relative overflow-hidden p-4">

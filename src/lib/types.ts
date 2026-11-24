@@ -75,6 +75,12 @@ export interface Fixture {
   minute?: number;
   period?: string;
   score: { home: number; away: number };
+  /**
+   * Progressive scoring: half-time, periods, quarters, sets or innings, in
+   * the order they were played. Live and finished fixtures carry whatever the
+   * provider published so scores can be read as the game unfolded.
+   */
+  periods?: { label: string; home: number; away: number }[];
   venue: string;
   round: string;
   attendance?: number;
@@ -231,6 +237,8 @@ export interface Recommendation {
   outcomeId?: string;
   odds: number;
   modelProbability: number;
+  /** Model probability × price − 1, carried so boards can show the edge. */
+  edge: number;
   stakeNgn: number;
   confidence: number;
   rationale: string;
@@ -378,7 +386,7 @@ export interface SubscriptionPlan {
   id: string;
   name: string;
   priceNgn: number;
-  interval: 'month';
+  interval: 'month' | 'forever';
   tagline: string;
   features: string[];
   limits: { watchlists: number; apiCalls: number; seats: number; llmReports: number };

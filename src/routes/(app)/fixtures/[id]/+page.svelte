@@ -3,6 +3,7 @@
   import { ArrowLeft, ArrowUpRight, Sparkles, Bot, ShieldAlert, TrendingUp, MapPin, CloudSun, Users, BarChart3, Layers, GitCompareArrows, Star, Copy, Check, LoaderCircle, ChevronRight, Info, Target, Radio } from '@lucide/svelte';
   import TeamBadge from '#lib/components/TeamBadge.svelte';
   import TeamNameLink from '#lib/components/TeamNameLink.svelte';
+  import AddToBetslip from '#lib/components/AddToBetslip.svelte';
   import ProbabilityBar from '#lib/components/ProbabilityBar.svelte';
   import Heatmap from '#lib/components/Heatmap.svelte';
   import LineChart from '#lib/components/LineChart.svelte';
@@ -139,6 +140,16 @@
           {#if live || finished}
             <div class="display num text-[28px] font-bold leading-none text-white sm:text-[36px]">{fixture.score.home}<span class="mx-1.5 text-fog-dim">–</span>{fixture.score.away}</div>
             <div class="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-fog-dim">{live ? `${fixture.period} · ${fixture.minute}′` : 'Final score'}</div>
+            {#if fixture.periods?.length}
+              <div class="mt-2 flex max-w-[190px] flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[9.5px] text-fog-dim sm:max-w-none">
+                {#each fixture.periods as period}
+                  <span class="inline-flex items-center gap-1">
+                    <span class="uppercase tracking-[0.05em]">{period.label}</span>
+                    <span class="num font-semibold text-fog">{period.home}–{period.away}</span>
+                  </span>
+                {/each}
+              </div>
+            {/if}
           {:else}
             <div class="num text-[19px] font-bold text-white">{new Date(fixture.kickoff).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
             <div class="mt-1 text-center text-[9.5px] font-semibold uppercase tracking-[0.12em] text-fog-dim">
@@ -312,7 +323,7 @@
             <h3 class="text-[13px] font-semibold text-white">Correct score heatmap</h3>
             <p class="mb-3 text-[10.5px] text-fog-dim">Probability of each final scoreline (%)</p>
             {#if prediction.scoreGrid.length}
-              <Heatmap cells={prediction.scoreGrid} homeShort={home.shortName} awayShort={away.shortName} />
+              <Heatmap cells={prediction.scoreGrid} homeShort={home.name} awayShort={away.name} />
             {:else}
               <p class="py-6 text-center text-[11px] text-fog">Scoreline distribution is not modelled for this sport.</p>
             {/if}
@@ -421,9 +432,9 @@
         <div class="panel p-4">
           <h3 class="text-[13px] font-semibold text-white">Head to head</h3>
           <div class="mt-2 grid grid-cols-3 gap-1.5 text-center sm:gap-2">
-            <div class="rounded-lg bg-white/[0.03] p-2"><div class="num text-[16px] font-bold text-lime">{fixture.h2h.homeWins}</div><div class="text-[9px] text-fog-dim">{home.shortName} wins</div></div>
+            <div class="rounded-lg bg-white/[0.03] p-2"><div class="num text-[16px] font-bold text-lime">{fixture.h2h.homeWins}</div><div class="text-[9px] text-fog-dim">{home.name} wins</div></div>
             <div class="rounded-lg bg-white/[0.03] p-2"><div class="num text-[16px] font-bold text-white/70">{fixture.h2h.draws}</div><div class="text-[9px] text-fog-dim">Draws</div></div>
-            <div class="rounded-lg bg-white/[0.03] p-2"><div class="num text-[16px] font-bold text-sky">{fixture.h2h.awayWins}</div><div class="text-[9px] text-fog-dim">{away.shortName} wins</div></div>
+            <div class="rounded-lg bg-white/[0.03] p-2"><div class="num text-[16px] font-bold text-sky">{fixture.h2h.awayWins}</div><div class="text-[9px] text-fog-dim">{away.name} wins</div></div>
           </div>
           <div class="mt-3 space-y-1 border-t border-white/[0.06] pt-2">
             {#each fixture.h2h.last.slice(0, 4) as match}
@@ -460,11 +471,31 @@
                 <span>Selection</span><span class="text-right">Model</span><span class="text-right">Best</span><span class="text-right">Edge</span>
               </div>
               {#each market.outcomes as o}
-                <div class={`grid grid-cols-[1fr_42px_42px_38px] items-center gap-1 rounded-lg px-1.5 py-2 text-[11px] sm:grid-cols-[1fr_52px_52px_44px] sm:gap-1.5 ${o.value ? 'bg-lime/[0.06]' : ''}`}>
+                <div class={`grid grid-cols-[1fr_42px_42px_38px_24px] items-center gap-1 rounded-lg px-1.5 py-2 text-[11px] sm:grid-cols-[1fr_52px_52px_44px_26px] sm:gap-1.5 ${o.value ? 'bg-lime/[0.06]' : ''}`}>
                   <span class="truncate text-white/85">{o.label} {#if o.trend > 0.02}<span class="text-[8px] text-rose">▼</span>{:else if o.trend < -0.02}<span class="text-[8px] text-mint">▲</span>{/if}</span>
                   <span class="num text-right text-fog">{(o.modelProbability * 100).toFixed(1)}%</span>
                   <span class="num text-right font-semibold text-lime">{o.bookOdds.toFixed(2)}</span>
                   <span class={`num text-right font-semibold ${o.edge > 0.025 ? 'text-mint' : 'text-fog-dim'}`}>{signed(o.edge * 100)}%</span>
+                  <AddToBetslip
+                    size="xs"
+                    leg={{
+                      fixtureId: fixture.id,
+                      fixtureLabel: `${home.name} vs ${away.name}`,
+                      league: league?.name ?? fixture.leagueId,
+                      leagueId: fixture.leagueId,
+                      sport: fixture.sport,
+                      kickoff: fixture.kickoff,
+                      marketId: market.id,
+                      marketLabel: market.label,
+                      marketGroup: market.group,
+                      outcomeId: o.id,
+                      label: o.label,
+                      odds: o.bookOdds,
+                      probability: o.modelProbability,
+                      edge: o.edge,
+                      bestBook: o.bestBook
+                    }}
+                  />
                 </div>
               {/each}
               <div class="px-1.5 pb-1 pt-1 text-[8.5px] text-fog-dim">Best price via {market.outcomes[0]?.bestBook} · updated {relativeTime(market.updatedAt)}</div>
@@ -479,7 +510,7 @@
         <h3 class="text-[13px] font-semibold text-white">Team profile</h3>
         <div class="mt-3 overflow-x-auto">
           <table class="data-table">
-            <thead><tr><th>Metric</th><th class="text-right">{home.shortName}</th><th class="text-right">{away.shortName}</th><th class="text-right">Edge</th></tr></thead>
+            <thead><tr><th>Metric</th><th class="text-right">{home.name}</th><th class="text-right">{away.name}</th><th class="text-right">Edge</th></tr></thead>
             <tbody>
               {#each [
                 { label: 'Elo rating', h: String(home.elo), a: String(away.elo), better: home.elo > away.elo ? 'h' : 'a' },
@@ -492,7 +523,7 @@
                   <td class="text-[11.5px] text-fog">{row.label}</td>
                   <td class={`num text-right text-[12px] font-semibold ${row.better === 'h' ? 'text-lime' : 'text-white/80'}`}>{row.h}</td>
                   <td class={`num text-right text-[12px] font-semibold ${row.better === 'a' ? 'text-lime' : 'text-white/80'}`}>{row.a}</td>
-                  <td class="text-right text-[10px] text-fog-dim">{row.better === 'h' ? home.shortName : row.better === 'a' ? away.shortName : '—'}</td>
+                  <td class="text-right text-[10px] text-fog-dim">{row.better === 'h' ? home.name : row.better === 'a' ? away.name : '—'}</td>
                 </tr>
               {/each}
             </tbody>

@@ -31,11 +31,13 @@ export function getTopValueBets(limit = 12, fixtures = getFixtures()): (ValueBet
   for (const f of fixtures) {
     if (f.status === 'finished') continue;
     const p = getPrediction(f);
-    const league = LEAGUES.find((l) => l.id === f.leagueId)?.shortName ?? f.leagueId;
+    const league = LEAGUES.find((l) => l.id === f.leagueId)?.name ?? f.leagueId;
     for (const bet of p.valueBets.slice(0, 2)) out.push({ ...bet, fixture: f, league });
   }
+  // Ranked by model probability first: the board answers "what is most likely",
+  // not "what pays the most".
   return out
-    .sort((a, b) => b.edge * b.confidence - a.edge * a.confidence)
+    .sort((a, b) => b.modelProbability - a.modelProbability || b.edge - a.edge)
     .slice(0, limit);
 }
 

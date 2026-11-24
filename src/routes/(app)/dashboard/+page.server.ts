@@ -63,12 +63,12 @@ export const load: PageServerLoad = async () => {
     prediction: dashboard.predictions.find((p) => p.fixture.id === f.id)!.prediction
   }));
   const valueBets = (snap?.valueBets ?? []).length
-    ? snap!.valueBets
+    ? [...snap!.valueBets].sort((a: any, b: any) => (b.modelProbability ?? 0) - (a.modelProbability ?? 0))
     : dashboard.valueBets.map((v) => ({
         ...v,
         fixture: v.fixture,
         fixtureLabel: `${TEAM_MAP[v.fixture.homeId]?.name} vs ${TEAM_MAP[v.fixture.awayId]?.name}`,
-        leagueLabel: LEAGUE_MAP[v.fixture.leagueId]?.shortName,
+        leagueLabel: LEAGUE_MAP[v.fixture.leagueId]?.name,
         sport: v.fixture.sport
       }));
 
@@ -84,7 +84,7 @@ export const load: PageServerLoad = async () => {
       fixture: null,
       fixtureId: v.fixture?.id ?? v.fixtureId,
       fixtureLabel: v.fixtureLabel ?? `${TEAM_MAP[v.fixture?.homeId]?.name} vs ${TEAM_MAP[v.fixture?.awayId]?.name}`,
-      leagueLabel: v.leagueLabel ?? LEAGUE_MAP[v.fixture?.leagueId]?.shortName,
+      leagueLabel: v.leagueLabel ?? LEAGUE_MAP[v.fixture?.leagueId]?.name,
       sport: v.sport ?? v.fixture?.sport
     })),
     brief: snap?.brief ?? (() => {

@@ -280,24 +280,25 @@ export async function mergedFixtures(): Promise<{
   source: 'provider' | 'engine';
 }> {
   const provider = await readProviderFixtures();
+  // Live collected data replaces the engine entirely. Mixing the two left
+  // placeholder fixtures sitting next to real ones on every page.
   if (!provider.length) return { fixtures: getFixtures(), providerCount: 0, source: 'engine' };
 
-  const providerTeams = new Set<string>();
-  for (const fixture of provider) {
-    providerTeams.add(`${fixture.homeId}|${fixture.awayId}`);
-  }
-  const engineOnly = getFixtures().filter((f) => !providerTeams.has(`${f.homeId}|${f.awayId}`));
-  const fixtures = [...provider, ...engineOnly].sort((a, b) => +new Date(a.kickoff) - +new Date(b.kickoff));
+  // Sports the provider does not cover at all (tennis has no API-Sports
+  // host here) fall back to the catalogue — upcoming fixtures only, never a
+  // simulated live score or a fake result.
+  const covered = new Set(provider.map((fixture) => fixture.sport));
+  const uncovered = getFixtures().filter((fixture) => !covered.has(fixture.sport) && fixture.status === 'scheduled');
+  const fixtures = [...provider, ...uncovered].sort((a, b) => +new Date(a.kickoff) - +new Date(b.kickoff));
   return { fixtures, providerCount: provider.length, source: 'provider' };
 }
 
 /** Live-now bundle used by the live centre. */
 export async function liveFeed(): Promise<Fixture[]> {
   const provider = await readProviderFixtures();
-  const engine = getFixtures();
-  const byId = new Map<string, Fixture>();
-  for (const f of [...engine, ...provider]) byId.set(f.id, f);
-  return [...byId.values()]
+  // Real fixtures only: a live centre must never carry a placeholder match.
+  const source = provider.length ? provider : getFixtures();
+  return source
     .filter((f) => f.status === 'live' || f.status === 'halftime')
     .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
 }

@@ -187,6 +187,87 @@ function scoreOf(raw: ApiFootballFixture, sport: ApiFootballSport): { home: numb
   return { home: 0, away: 0 };
 }
 
+interface PeriodScore {
+  label: string;
+  home: number;
+  away: number;
+}
+
+function pairFrom(value: unknown): { home: number; away: number } | null {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const parts = value.split(/[-:]/).map((part) => Number(part.trim()));
+    if (parts.length === 2 && parts.every((n) => Number.isFinite(n))) return { home: parts[0], away: parts[1] };
+    return null;
+  }
+  if (typeof value === 'object') {
+    const record = value as { home?: unknown; away?: unknown };
+    const home = numberOrNull(record.home as number);
+    const away = numberOrNull(record.away as number);
+    if (home !== null && away !== null) return { home, away };
+  }
+  return null;
+}
+
+/** Progressive scores: halves, periods, quarters, sets and innings. */
+function periodsOf(raw: ApiFootballFixture, sport: ApiFootballSport): PeriodScore[] | undefined {
+  const out: PeriodScore[] = [];
+  const push = (label: string, pair: { home: number; away: number } | null) => {
+    if (pair) out.push({ label, home: pair.home, away: pair.away });
+  };
+
+  if (sport === 'football') {
+    push('Half time', pairFrom(raw.score?.halftime));
+    push('Extra time', pairFrom(raw.score?.extratime));
+    push('Penalties', pairFrom(raw.score?.penalty));
+    return out.length ? out : undefined;
+  }
+
+  if (sport === 'basketball' || sport === 'nba') {
+    const home = raw.scores?.home as Record<string, unknown> | number | undefined;
+    const away = raw.scores?.away as Record<string, unknown> | number | undefined;
+    if (home && typeof home === 'object' && away && typeof away === 'object') {
+      for (let q = 1; q <= 4; q++) {
+        const h = numberOrNull(home[`quarter_${q}`] as number);
+        const a = numberOrNull(away[`quarter_${q}`] as number);
+        if (h !== null && a !== null) out.push({ label: `Q${q}`, home: h, away: a });
+      }
+      const h1 = numberOrNull(home.quarter_1 as number);
+      const h2 = numberOrNull(home.quarter_2 as number);
+      const a1 = numberOrNull(away.quarter_1 as number);
+      const a2 = numberOrNull(away.quarter_2 as number);
+      if (h1 !== null && h2 !== null && a1 !== null && a2 !== null) {
+        out.unshift({ label: 'Half time', home: h1 + h2, away: a1 + a2 });
+      }
+    }
+    return out.length ? out : undefined;
+  }
+
+  if (sport === 'icehockey') {
+    const periods = raw.periods as Record<string, unknown> | undefined;
+    if (periods && typeof periods === 'object') {
+      const labels: Array<[string, string]> = [
+        ['first', '1st period'],
+        ['second', '2nd period'],
+        ['third', '3rd period'],
+        ['overtime', 'Overtime']
+      ];
+      for (const [key, label] of labels) push(label, pairFrom(periods[key]));
+    }
+    return out.length ? out : undefined;
+  }
+
+  if (sport === 'baseball') {
+    const innings = raw.periods as Record<string, unknown> | undefined;
+    if (innings && typeof innings === 'object') {
+      for (const key of Object.keys(innings).slice(0, 12)) push(`Inn ${key}`, pairFrom(innings[key]));
+    }
+    return out.length ? out : undefined;
+  }
+
+  return out.length ? out : undefined;
+}
+
 /** Elapsed minute / period label for the live centre. */
 function progressOf(raw: ApiFootballFixture, sport: ApiFootballSport, status: FixtureStatus): { minute?: number; period?: string } {
   const statusBlock = raw.fixture?.status ?? raw.status;
@@ -284,6 +365,7 @@ export function normaliseProviderFixture(raw: ApiFootballFixture, sport: ApiFoot
 
   const status = statusOf(raw, sport);
   const score = scoreOf(raw, sport);
+  const periods = periodsOf(raw, sport);
   const progress = progressOf(raw, sport, status);
   const venue =
     (typeof raw.venue === 'string' ? raw.venue : [raw.venue?.name, raw.venue?.city].filter(Boolean).join(', ')) ||
@@ -310,6 +392,7 @@ export function normaliseProviderFixture(raw: ApiFootballFixture, sport: ApiFoot
     minute: progress.minute,
     period: progress.period,
     score,
+    periods,
     venue,
     round: round || league.name,
     officials: raw.fixture?.referee ? [raw.fixture.referee] : undefined,

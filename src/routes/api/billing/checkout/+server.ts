@@ -12,7 +12,7 @@ export const prerender = false;
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json().catch(() => ({}));
   const email = typeof body?.email === 'string' ? body.email : 'owner@cavebettor.ng';
-  const plan = body?.plan === 'desk' ? 'CaveBettor Trading Desk' : 'CaveBettor Pro';
+  const plan = 'CaveBettor Pro';
   const amountNgn = 5000;
   const secret = process.env.PAYSTACK_SECRET_KEY;
 

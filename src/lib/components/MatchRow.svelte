@@ -6,6 +6,7 @@
   import { ChevronRight, MapPin, Radio } from '@lucide/svelte';
   import TeamBadge from './TeamBadge.svelte';
   import TeamNameLink from './TeamNameLink.svelte';
+  import ScoreProgression from './ScoreProgression.svelte';
 
   let { fixture, prediction }: { fixture: Fixture; prediction: PredictionCard } = $props();
 
@@ -71,6 +72,9 @@
       <span class="inline-flex items-center gap-0.5"><MapPin size={9} /> {fixture.venue}</span>
       {#if live}<span class="inline-flex items-center gap-0.5 text-mint"><Radio size={9} /> in play</span>{/if}
     </div>
+    {#if live || finished}
+      <div class="mt-1"><ScoreProgression {fixture} compact /></div>
+    {/if}
   </div>
 
   <!-- Probability bar (desktop) -->

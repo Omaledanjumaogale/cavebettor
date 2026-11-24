@@ -10,6 +10,7 @@
   import { onMount } from 'svelte';
   import BrandMark from './BrandMark.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
+  import { betslip } from '#lib/betslip.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import { DEMO_USER, SUBSCRIPTION_PLANS } from '#lib/data/catalog';
 
@@ -30,7 +31,8 @@
   let adminView = $state(false);
 
   const viewerRole = $derived(String(user?.role ?? DEMO_USER.role));
-  const canAdmin = $derived(['owner', 'super_admin', 'admin'].includes(viewerRole));
+  // The console belongs to the super admin alone — no delegated admin roles.
+  const canAdmin = $derived(viewerRole === 'super_admin');
 
   onMount(() => {
     try {
@@ -69,7 +71,8 @@
         { href: '/sports/basketball', label: 'Basketball desk', icon: Volleyball, badge: '' },
         { href: '/sports/nba', label: 'NBA desk', icon: Volleyball, badge: '' },
         { href: '/sports/icehockey', label: 'Ice hockey desk', icon: Snowflake, badge: '' },
-        { href: '/sports/baseball', label: 'Baseball desk', icon: CircleDot, badge: '' }
+        { href: '/sports/baseball', label: 'Baseball desk', icon: CircleDot, badge: '' },
+        { href: '/sports/tennis', label: 'Tennis desk', icon: CircleDot, badge: '' }
       ]
     },
     {
@@ -97,6 +100,7 @@
       label: 'Owner console',
       items: [
         { href: '/admin', label: 'Console overview', icon: ShieldCheck, badge: '' },
+        { href: '/admin/shortlist', label: 'Shortlist board', icon: Sparkles, badge: '' },
         { href: '/models', label: 'Model lab', icon: BrainCircuit, badge: '' },
         { href: '/scrapers', label: 'Data pipeline', icon: Database, badge: '' }
       ]
@@ -338,6 +342,12 @@
           </button>
         {/if}
 
+        <a href="/betslip" class="btn-icon relative shrink-0" aria-label={`Betslip: ${betslip.count} selections`} title="Betslip">
+          <Ticket size={15} />
+          {#if betslip.count}
+            <span class="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-lime px-1 text-[9px] font-bold text-pitch-950">{betslip.count}</span>
+          {/if}
+        </a>
         <ThemeToggle compact />
         <button class="btn-icon relative shrink-0" aria-label="Notifications">
           <Bell size={15} />

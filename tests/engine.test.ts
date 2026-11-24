@@ -105,7 +105,7 @@ describe('prediction engine', () => {
 
   it('never offers contradictory totals on the same board', () => {
     const totals = prediction.recommendations
-      .map((rec) => /(over|under)\s+([0-9]+(?:\.[0-9]+)?)/i.exec(rec.selection))
+      .map((rec) => /\b(over|under)\s+([0-9]+(?:\.[0-9]+)?)/i.exec(rec.selection))
       .filter((m): m is RegExpExecArray => Boolean(m))
       .map((m) => ({ direction: m[1].toLowerCase(), line: Number(m[2]) }));
     const over = totals.filter((t) => t.direction === 'over').sort((a, b) => a.line - b.line)[0];
@@ -116,7 +116,7 @@ describe('prediction engine', () => {
   it('keeps one line per totals direction per scope', () => {
     const keys = new Set<string>();
     for (const rec of prediction.recommendations) {
-      const match = /^(.*?)(over|under)\s+[0-9]/i.exec(rec.selection);
+      const match = /^(.*?)\b(over|under)\s+[0-9]/i.exec(rec.selection);
       if (!match) continue;
       const key = `${match[1].trim().toLowerCase()}|${match[2].toLowerCase()}`;
       expect(keys.has(key)).toBe(false);

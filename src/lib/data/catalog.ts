@@ -327,20 +327,39 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     priceNgn: 5000,
     interval: 'month',
     tagline: 'Everything. Every market. Every sport.',
-    features: ['All 20 leagues, 5 sports and 84 markets', 'Full value-edge engine and Kelly staking', 'Live in-play probabilities and odds movement', 'Self-training model registry and calibration', 'LLM match analyst and daily briefings', 'Scraper control room and API keys', 'Unlimited watchlists and paper bankroll', 'API access — 25,000 calls / month'],
-    limits: { watchlists: 999, apiCalls: 25000, seats: 1, llmReports: 1000 },
+    features: [
+      'All 20 leagues, 5 sports and 84 markets',
+      'Full value-edge engine and Kelly staking',
+      'Live in-play probabilities and odds movement',
+      'Self-training model registry and calibration',
+      'LLM match analyst and daily briefings',
+      'Scraper control room and API keys',
+      'Unlimited watchlists and paper bankroll',
+      'Up to 5 analyst seats with a shared workspace, notes and decision log',
+      'Custom model retraining windows',
+      'Webhook and CSV exports',
+      'Priority data-source slots',
+      'Role-based access and audit trail',
+      'API access — 100,000 calls / month'
+    ],
+    limits: { watchlists: 999, apiCalls: 100000, seats: 5, llmReports: 5000 },
     featured: true
   },
   {
-    id: 'desk',
-    name: 'Trading Desk',
-    priceNgn: 5000,
-    interval: 'month',
-    tagline: '₦5,000 per seat, per month',
-    features: ['Everything in Pro for up to 5 analysts', 'Shared workspace, notes and decision log', 'Custom model retraining windows', 'Webhook + CSV exports', 'Priority data-source slots', 'Role-based access and audit trail'],
-    limits: { watchlists: 999, apiCalls: 100000, seats: 5, llmReports: 5000 },
+    id: 'owner',
+    name: 'Owner Access',
+    priceNgn: 0,
+    interval: 'forever',
+    tagline: 'Free forever — the whole platform and the admin console',
+    features: [
+      'Every league, sport and market, with no usage ceiling',
+      'Admin console, shortlist boards and provider controls',
+      'Model registry, calibration and retraining windows',
+      'All future releases included for life'
+    ],
+    limits: { watchlists: 9999, apiCalls: 1000000, seats: 25, llmReports: 100000 },
     featured: false
-  }
+  },
 ];
 
 export const DEMO_USER: UserProfile = {

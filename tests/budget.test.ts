@@ -58,9 +58,16 @@ describe('provider budget ledger', () => {
 });
 
 describe('sport dashboards', () => {
-  it('covers football, basketball, NBA, ice hockey and baseball', () => {
+  it('covers every sport the app prices, tennis included', () => {
     const ids = SPORT_DASHBOARDS.map((d) => d.id);
-    expect(ids).toEqual(['football', 'basketball', 'nba', 'icehockey', 'baseball']);
+    expect(ids).toEqual(['football', 'basketball', 'nba', 'icehockey', 'baseball', 'tennis']);
+  });
+
+  it('gives tennis its own desk and competition set', () => {
+    const tennis = SPORT_DASHBOARD_MAP.tennis;
+    expect(tennis.sport).toBe('tennis');
+    expect(tennis.leagueIds).toContain('atp');
+    expect(tennis.primaryMarkets.map((m) => m.id)).toContain('sethcp');
   });
 
   it('gives NBA its own desk on the basketball engine', () => {

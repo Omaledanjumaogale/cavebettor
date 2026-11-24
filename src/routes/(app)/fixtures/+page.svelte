@@ -10,7 +10,7 @@
   let search = $state(untrack(() => data.filters.q));
 
   const statuses = [
-    { id: 'all', label: 'All fixtures' },
+    { id: 'all', label: 'Upcoming & live' },
     { id: 'live', label: 'Live' },
     { id: 'upcoming', label: 'Upcoming' },
     { id: 'value', label: 'With value' },
@@ -25,6 +25,7 @@
       q: data.filters.q,
       view: data.filters.view,
       day: data.filters.day,
+      within: data.filters.within,
       ...patch
     });
     for (const [k, v] of [...params.entries()]) {
@@ -121,6 +122,27 @@
         </button>
       {/each}
     </div>
+    <div class="flex items-center gap-1 overflow-x-auto">
+      {#each [
+        { id: 'all', label: 'Anytime' },
+        { id: '1h', label: 'Next 1h' },
+        { id: '3h', label: 'Next 3h' },
+        { id: '6h', label: 'Next 6h' },
+        { id: '12h', label: 'Next 12h' },
+        { id: '24h', label: 'Next 24h' }
+      ] as window}
+        <button
+          onclick={() => update({ within: window.id })}
+          class={`shrink-0 rounded-lg border px-2 py-1.5 text-[10.5px] font-semibold transition ${
+            data.filters.within === window.id
+              ? 'border-mint/35 bg-mint/10 text-mint'
+              : 'border-white/10 text-fog hover:bg-white/[0.05] hover:text-white'
+          }`}
+        >
+          {window.label}
+        </button>
+      {/each}
+    </div>
     <div class="hidden h-5 w-px bg-white/10 lg:block"></div>
     <select
       value={data.filters.league}
@@ -137,7 +159,7 @@
       <Search size={13} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fog-dim" />
       <input class="input !py-2 pl-9 text-[11.5px]" placeholder="Team or club…" bind:value={search} />
     </form>
-    {#if data.filters.q || data.filters.league !== 'all' || data.filters.status !== 'all' || data.filters.sport !== 'all'}
+    {#if data.filters.q || data.filters.league !== 'all' || data.filters.status !== 'all' || data.filters.sport !== 'all' || data.filters.within !== 'all'}
       <button onclick={() => goto('/fixtures', { noScroll: true })} class="btn btn-ghost !px-2.5 !py-1.5 text-[10.5px]"><CircleX size={12} /> Clear</button>
     {/if}
   </div>

@@ -25,7 +25,7 @@ export interface AccountRecord {
   provider: Exclude<AuthProvider, 'ewin'>;
   createdAt: string;
   lastLoginAt?: string;
-  plan: 'starter' | 'pro' | 'desk';
+  plan: 'starter' | 'pro';
 }
 
 const ITERATIONS = 210_000;

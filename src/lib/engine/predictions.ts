@@ -28,6 +28,7 @@ import {
 } from './core';
 import { expectedScore } from './fixtures';
 import { buildMarkets } from './markets';
+import { calibrateThreeWay, scoringProfile } from './scoring';
 
 const MAX_GOALS = 8;
 const GRID = Array.from({ length: MAX_GOALS + 1 }, (_, i) => i);
@@ -189,8 +190,11 @@ function footballCore(fixture: Fixture): CoreModel {
   const home = homeTeam(fixture);
   const away = awayTeam(fixture);
   const seed = fixture.id;
-  const expected = expectedScore('football', home, away, 1.065);
+  const league = fixtureLeague(fixture);
+  const profile = scoringProfile('football', fixture.leagueId, `${league.name} ${league.country ?? ''}`);
+  const expected = expectedScore('football', home, away, 1.065, `${league.name} ${league.country ?? ''}`);
   const rho = -0.085 + jitter(seed + 'rho', 0.018);
+  const strength = clamp(Math.abs(home.elo - away.elo) / 420, 0.2, 0.95);
 
   // Live adjustment: only goals still to be scored follow the Poisson process.
   const live = fixture.status === 'live' || fixture.status === 'halftime';
@@ -205,7 +209,11 @@ function footballCore(fixture: Fixture): CoreModel {
   const halves = { first: cellsFromGrid(firstGrid), second: cellsFromGrid(secondGrid) };
 
   // In-play probabilities must include the goals already on the board.
-  const summary = summarizeGrid(grid, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
+  const raw = summarizeGrid(grid, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
+  // Poisson with an Elo prior is over-confident; blend towards the league's
+  // own home/draw/away base rates before anything is shown or recommended.
+  const calibrated = calibrateThreeWay(raw, profile, strength);
+  const summary = { ...raw, ...calibrated };
   if (live) {
     // Re-anchor expectations for display at full-match level.
     const total = (fixture.score.home + fixture.score.away) / Math.max(0.08, progress);
@@ -237,20 +245,24 @@ function footballCore(fixture: Fixture): CoreModel {
 function hockeyCore(fixture: Fixture): CoreModel {
   const home = homeTeam(fixture);
   const away = awayTeam(fixture);
-  const expected = expectedScore('icehockey', home, away, 1.04);
+  const league = fixtureLeague(fixture);
+  const profile = scoringProfile('icehockey', fixture.leagueId, `${league.name} ${league.country ?? ''}`);
+  const expected = expectedScore('icehockey', home, away, 1.04, `${league.name} ${league.country ?? ''}`);
   const rho = -0.05;
+  const strength = clamp(Math.abs(home.elo - away.elo) / 420, 0.2, 0.95);
   const live = fixture.status === 'live';
   const progress = live ? clamp((fixture.minute ?? 30) / 90, 0, 1) : 0;
   const remaining = live ? clamp(1 - progress, 0.05, 1) : 1;
   const lambdaH = expected.home * remaining;
   const lambdaA = expected.away * remaining;
   const grid = poissonGrid(lambdaH, lambdaA, rho);
-  const summary = summarizeGrid(grid, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
+  const raw = summarizeGrid(grid, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
+  const summary = { ...raw, ...calibrateThreeWay(raw, profile, strength) };
   const periods = [1, 2, 3].map((n) =>
     periodFromGrid(`p${n}`, `Period ${n}`, poissonGrid(clamp(lambdaH / 3, 0.01, 2.2), clamp(lambdaA / 3, 0.01, 2.1), rho), 1.5)
   );
-  const homeMl = clamp(summary.home + summary.draw * 0.54, 0.02, 0.96);
-  const awayMl = clamp(summary.away + summary.draw * 0.46, 0.02, 0.96);
+  const homeMl = clamp(summary.home + summary.draw * 0.54, 0.02, 0.9);
+  const awayMl = clamp(summary.away + summary.draw * 0.46, 0.02, 0.9);
   const total = live
     ? fixture.score.home + fixture.score.away + lambdaH + lambdaA
     : expected.home + expected.away;
@@ -281,18 +293,37 @@ function hockeyCore(fixture: Fixture): CoreModel {
 function basketballCore(fixture: Fixture): CoreModel {
   const home = homeTeam(fixture);
   const away = awayTeam(fixture);
-  const expected = expectedScore('basketball', home, away, 1);
+  const league = fixtureLeague(fixture);
+  const profile = scoringProfile('basketball', fixture.leagueId, `${league.name} ${league.country ?? ''}`);
+  const expected = expectedScore('basketball', home, away, 1, `${league.name} ${league.country ?? ''}`);
   const seed = fixture.id;
   const live = fixture.status === 'live';
-  const progress = live ? clamp((fixture.minute ?? 72) / 150, 0, 1) : 0;
-  const remaining = live ? clamp(1 - progress, 0.04, 1) : 1;
+  // A live projection must respect the score already on the board: if 107
+  // points are in, the game is half gone no matter what the clock feed says.
+  // `minute` is elapsed wall-clock time for a basketball game (about 150 for
+  // the NBA, 120 in Europe), not the 48-minute game clock.
+  const clockProgress = live ? clamp((fixture.minute ?? 72) / (profile.total >= 200 ? 150 : 120), 0, 0.98) : 0;
+  const scored = fixture.score.home + fixture.score.away;
+  const scoreProgress = live ? clamp(scored / profile.total, 0, 0.97) : 0;
+  // The clock may run ahead of the scoreboard (timeouts, stoppages) but never
+  // so far that 107 points in looks like the first quarter.
+  const progress = Math.max(scoreProgress, Math.min(clockProgress, scoreProgress + 0.3));
+  const remaining = live ? clamp(1 - progress, 0.05, 1) : 1;
   const finalHome = live ? fixture.score.home + expected.home * remaining : expected.home;
   const finalAway = live ? fixture.score.away + expected.away * remaining : expected.away;
-  const sdMargin = home.leagueId === 'nba' ? 12.6 : home.leagueId === 'euroleague' ? 9.8 : 8.9;
-  const sdTotal = home.leagueId === 'nba' ? 19.4 : 14.6;
-  const margin = finalHome - finalAway + jitter(seed + 'm', 0.6);
+  // Volatility follows the competition: NBA games swing far more than a
+  // women's league game, where a 128-point total is the whole contest.
+  const sdMargin = profile.sdMargin;
+  const sdTotal = profile.sdTotal;
+  const margin = finalHome - finalAway + jitter(seed + 'm', profile.sdMargin * 0.05);
   const total = finalHome + finalAway;
-  const homeProb = clamp(normalCdf(margin / sdMargin), 0.03, 0.97);
+  const rawHome = clamp(normalCdf(margin / sdMargin), 0.05, 0.95);
+  const calibrated = calibrateThreeWay(
+    { home: rawHome, draw: 0, away: 1 - rawHome },
+    profile,
+    clamp(Math.abs(margin) / 26, 0.2, 0.95)
+  );
+  const homeProb = calibrated.home;
   const line = Math.round(margin * 2) / 2;
   const totalLine = Math.round(total * 2) / 2;
   const homeCover = clamp(1 - normalCdf((line - margin) / sdMargin), 0.02, 0.98);
@@ -341,8 +372,10 @@ function basketballCore(fixture: Fixture): CoreModel {
 function baseballCore(fixture: Fixture): CoreModel {
   const home = homeTeam(fixture);
   const away = awayTeam(fixture);
-  const expected = expectedScore('baseball', home, away, 1.03);
-  const sd = 2.7;
+  const league = fixtureLeague(fixture);
+  const profile = scoringProfile('baseball', fixture.leagueId, `${league.name} ${league.country ?? ''}`);
+  const expected = expectedScore('baseball', home, away, 1.03, `${league.name} ${league.country ?? ''}`);
+  const sd = profile.sdTotal;
   const live = fixture.status === 'live';
   const progress = live ? clamp((fixture.minute ?? 95) / 190, 0, 1) : 0;
   const remaining = live ? clamp(1 - progress, 0.04, 1) : 1;
@@ -354,6 +387,7 @@ function baseballCore(fixture: Fixture): CoreModel {
   let homeWin = 0;
   for (let h = 0; h < 16; h++) for (let a = 0; a < 16; a++) if (h > a) homeWin += normalized[h][a];
   homeWin = clamp(homeWin + (1 - homeWin) * 0.52, 0.03, 0.97);
+  homeWin = 0.5 + (homeWin - 0.5) * 0.86;
   const summary = summarizeGrid(normalized, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
   const total = live ? fixture.score.home + fixture.score.away + lambdaH + lambdaA : expected.home + expected.away;
   const margin = live ? fixture.score.home - fixture.score.away + lambdaH - lambdaA : expected.home - expected.away;
@@ -385,6 +419,8 @@ function tennisCore(fixture: Fixture): CoreModel {
   let winProb = 1 / (1 + Math.pow(10, -eloDiff / 400));
   const seed = fixture.id;
   winProb = clamp(winProb + jitter(seed + 'tennis', 0.012), 0.03, 0.97);
+  // An Elo-only win probability overstates lopsided ties; pull it to the middle.
+  winProb = 0.5 + (winProb - 0.5) * 0.88;
   const setProb = solveSetProbability(winProb, bestOfFive);
   const setsToWin = bestOfFive ? 3 : 2;
   const totalGames = bestOfFive ? 37.5 : 23.2;
@@ -759,11 +795,11 @@ function scoreOf(row: Candidate): number {
 
 /** "1st half", "first half" and "h1" must collapse to one scope. */
 const SCOPE_ALIASES: Array<[RegExp, string]> = [
-  [/^(1st|first)\s+half/i, 'first half'],
-  [/^(1st|first)\s+period/i, 'first period'],
-  [/^(1st|first)\s+quarter/i, 'first quarter'],
-  [/^(1st|first)\s+set/i, 'first set'],
-  [/^(first|1st)\s+(5|five)\s+innings/i, 'first five innings']
+  [/^(1st|first)\s+half\b/i, 'first half'],
+  [/^(1st|first)\s+period\b/i, 'first period'],
+  [/^(1st|first)\s+quarter\b/i, 'first quarter'],
+  [/^(1st|first)\s+set\b/i, 'first set'],
+  [/^(first|1st)\s+(5|five)\s+innings\b/i, 'first five innings']
 ];
 
 /** Split a totals label into its scope ("Feyenoord", "1st half", "match") and line. */
@@ -921,6 +957,7 @@ function buildRecommendations(valueBets: ValueBet[], markets: Market[], fixture:
       outcomeId: row.outcomeId,
       odds: row.odds,
       modelProbability: row.modelProbability,
+      edge: row.edge,
       stakeNgn: Math.max(1000, Math.min(50_000, row.stakeNgn)),
       confidence: row.confidence,
       rationale:
@@ -944,6 +981,7 @@ function buildRecommendations(valueBets: ValueBet[], markets: Market[], fixture:
       outcomeId: fallback?.id,
       odds: fallback?.bookOdds ?? 2,
       modelProbability: fallback?.modelProbability ?? 0.5,
+      edge: fallback ? fallback.modelProbability * fallback.bookOdds - 1 : 0,
       stakeNgn: 0,
       confidence: fallback?.confidence ?? 60,
       rationale: 'No selection clears both the strike-rate and value thresholds. The model passes on this fixture - the most likely result is shown for reference only.',
@@ -966,6 +1004,7 @@ function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: 
       outcomeId: best.outcomeId,
       odds: best.odds,
       modelProbability: best.modelProbability,
+      edge: best.edge,
       stakeNgn: best.stakeNgn,
       confidence: best.confidence,
       rationale: `Highest-confidence call: ${(best.modelProbability * 100).toFixed(1)}% model strike rate at ${best.odds.toFixed(2)} with ${best.bookmaker}, ${(best.edge * 100).toFixed(1)}% above the implied price. Quarter-Kelly sizing on a ₦1.25m paper bankroll.`,
@@ -981,6 +1020,7 @@ function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: 
     outcomeId: fallback?.id,
     odds: fallback?.bookOdds ?? 2,
     modelProbability: fallback?.modelProbability ?? 0.5,
+    edge: fallback ? fallback.modelProbability * fallback.bookOdds - 1 : 0,
     stakeNgn: 5000,
     confidence: fallback?.confidence ?? 60,
     rationale: 'No selection clears the value threshold. This is the model’s most likely outcome — treated as a no-bet or minimum-stake watchlist item.',

@@ -1,5 +1,8 @@
 import { wireCounts } from '#lib/server/feed';
 import { DEMO_USER, SUBSCRIPTION_PLANS } from '#lib/data/catalog';
+
+/** The super admin never pays: full platform and admin console, free forever. */
+const OWNER_PLAN = SUBSCRIPTION_PLANS.find((plan) => plan.id === 'owner') ?? SUBSCRIPTION_PLANS[1];
 import type { LayoutServerLoad } from './$types';
 
 /**
@@ -27,9 +30,12 @@ export const load: LayoutServerLoad = async ({ locals }) => {
           name: locals.user.name,
           email: locals.user.email,
           avatar: locals.user.avatar,
-          role: locals.user.role === 'super_admin' ? 'owner' : locals.user.role,
+          role: locals.user.role,
           provider: locals.user.provider,
-          plan: SUBSCRIPTION_PLANS[1]
+          plan: locals.user.role === 'super_admin' ? OWNER_PLAN : SUBSCRIPTION_PLANS[1],
+          planStatus: 'active',
+          renewsAt: null,
+          isSuperAdmin: locals.user.role === 'super_admin'
         }
       : DEMO_USER
   };

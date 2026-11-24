@@ -308,6 +308,59 @@ export const SPORT_DASHBOARDS: SportDashboardDef[] = [
       'The run line uses the final score.',
       'First-five markets settle before the bullpen game.'
     ]
+  },
+  {
+    id: 'tennis',
+    sport: 'tennis',
+    name: 'Tennis',
+    icon: '🎾',
+    accent: '#7bdcff',
+    tagline: 'Serve-hold Elo with set and game handicaps across the ATP, WTA and Grand Slam circuits.',
+    leagueIds: ['atp', 'wta', 'grandslam'],
+    providerHost: 'v1.tennis.api-sports.io',
+    engine: {
+      name: 'Serve-hold Elo + set solver',
+      version: 'tennis-v3.0',
+      family: 'Point-level Elo converted to set and match probabilities',
+      settlements: 'Best of three; best of five at Grand Slams'
+    },
+    metrics: [
+      { id: 'fixtures', label: 'Fixtures', hint: 'Matches in the tennis universe', tone: 'lime' },
+      { id: 'live', label: 'Live now', hint: 'Matches in progress', tone: 'mint' },
+      { id: 'confidence', label: 'Avg confidence', hint: 'Mean ensemble confidence', tone: 'sky' },
+      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 2.5% edge threshold', tone: 'amber' },
+      { id: 'edge', label: 'Best edge', hint: 'Largest positive edge available', tone: 'mint' },
+      { id: 'markets', label: 'Markets priced', hint: 'Distinct tennis markets on the board', tone: 'sky' }
+    ],
+    primaryMarkets: [
+      { id: 'ml', label: 'Match winner', group: 'match' },
+      { id: 'sethcp', label: 'Set handicap', group: 'handicap' },
+      { id: 'total', label: 'Total games', group: 'totals' },
+      { id: 'set1', label: 'First set winner', group: 'period' },
+      { id: 'set1total', label: 'First set total games', group: 'totals' }
+    ],
+    secondaryMarkets: [
+      { id: 'set1', label: 'First set winner', group: 'period' },
+      { id: 'sethcp', label: 'Game handicap', group: 'handicap' }
+    ],
+    statBoard: [
+      { id: 'elo', label: 'Serve Elo', hint: 'Surface-adjusted hold and break rating', better: 'higher' },
+      { id: 'hold', label: 'Hold %', hint: 'Service games held', better: 'higher' },
+      { id: 'break', label: 'Break %', hint: 'Return games converted', better: 'higher' },
+      { id: 'form', label: 'Form', hint: 'Last five results weighted by opponent', better: 'higher' },
+      { id: 'games', label: 'Projected games', hint: 'Combined games expectation', better: 'lower' }
+    ],
+    modelling: [
+      'Serve-hold and break rates are converted into point-level probabilities, then solved set by set.',
+      'Best-of-five is modelled separately from best-of-three, which changes both the match and the total-games distribution.',
+      'Set handicaps and game handicaps are derived from the same set distribution so they never contradict the match price.',
+      'The first-set market uses a fresh set solve, not a fraction of the match probability.'
+    ],
+    notes: [
+      'Retirements settle according to the competition rule in force.',
+      'Set handicaps settle on completed sets only.',
+      'Grand Slam men’s singles is best of five; everything else is best of three.'
+    ]
   }
 ];
 

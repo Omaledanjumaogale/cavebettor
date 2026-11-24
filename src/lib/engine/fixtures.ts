@@ -2,6 +2,7 @@ import { LEAGUES, LEAGUE_MAP, TEAMS, TEAM_MAP } from '#lib/data/catalog';
 import { resolveTeam } from '#lib/data/registry';
 import type { Fixture, FixtureStatus, FormResult, SportId, Team } from '#lib/types';
 import { clamp, hashString, mulberry32, normalCdf, seeded } from './core';
+import { scoringProfile } from './scoring';
 
 const HOUR = 3600_000;
 
@@ -84,27 +85,122 @@ function formString(rand: () => number): FormResult[] {
   });
 }
 
-export function expectedScore(sport: SportId, home: Team, away: Team, homeAdv = 1) {
+/**
+ * Expected score for a fixture, scaled by its competition.
+ *
+ * `base` is the competition's own per-team scoring rate, never a global
+ * constant, so a Bundesliga side is expected to score more than a Serie A side
+ * and an NBA team far more than a NCAA or women's league team.
+ */
+export function expectedScore(sport: SportId, home: Team, away: Team, homeAdv = 1, leagueName?: string) {
   const eloDiff = home.elo - away.elo;
+  const profile = scoringProfile(sport, home.leagueId, leagueName);
+
   if (sport === 'football' || sport === 'icehockey') {
-    const base = sport === 'football' ? 0.76 : 3.05;
-    const h = clamp(Math.pow(home.attack, 1.15) * Math.pow(away.defence, 1.1) * base * homeAdv * (1 + eloDiff / 9000), 0.15, 5.2);
-    const a = clamp(Math.pow(away.attack, 1.12) * Math.pow(home.defence, 1.08) * base * 0.86 * (1 - eloDiff / 9000), 0.12, 5);
+    // Team strength moves the split, the competition sets the total. Exponents
+    // above 1 used to compound a 1.2 attack into a four-goal expectation.
+    const attackH = 1 + (home.attack - 1) * 0.45;
+    const attackA = 1 + (away.attack - 1) * 0.45;
+    const defH = 1 + (home.defence - 1) * 0.45;
+    const defA = 1 + (away.defence - 1) * 0.45;
+    const h = clamp(profile.perTeam * attackH * defA * homeAdv * (1 + eloDiff / 14000), profile.perTeam * 0.28, profile.perTeam * 2.05);
+    const a = clamp(profile.perTeam * attackA * defH * 0.9 * (1 - eloDiff / 14000), profile.perTeam * 0.24, profile.perTeam * 1.95);
+    // Never let one fixture escape its competition's scoring envelope.
+    const total = h + a;
+    const ceiling = profile.total * 1.3;
+    const floor = profile.total * 0.62;
+    if (total > ceiling || total < floor) {
+      const scale = clamp(total > ceiling ? ceiling / total : floor / total, 0.6, 1.7);
+      return { home: h * scale, away: a * scale };
+    }
     return { home: h, away: a };
+  }
+
+  if (sport === 'basketball') {
+    // Possession-based: the competition sets the pace, the teams shift it.
+    const pace = (1 + (home.attack - 1) * 0.42) * (1 + (away.defence - 1) * 0.42);
+    const paceA = (1 + (away.attack - 1) * 0.42) * (1 + (home.defence - 1) * 0.42);
+    const eloPoints = eloDiff / 30;
+    const h = clamp(profile.perTeam * pace + eloPoints + 2.2, profile.perTeam * 0.78, profile.perTeam * 1.16);
+    const a = clamp(profile.perTeam * paceA - eloPoints, profile.perTeam * 0.76, profile.perTeam * 1.14);
+    const total = h + a;
+    const ceiling = profile.total * 1.12;
+    if (total > ceiling) {
+      const scale = ceiling / total;
+      return { home: h * scale, away: a * scale };
+    }
+    return { home: h, away: a };
+  }
+
+  if (sport === 'baseball') {
+    const h = clamp((home.attack / 1.03) * profile.perTeam * (away.defence / 1.02) * homeAdv + eloDiff / 260, profile.perTeam * 0.45, profile.perTeam * 1.9);
+    const a = clamp((away.attack / 1.03) * profile.perTeam * (home.defence / 1.02) - eloDiff / 280, profile.perTeam * 0.4, profile.perTeam * 1.8);
+    return { home: h, away: a };
+  }
+
+  // tennis — expected games won, used for game markets
+  return { home: profile.perTeam + 1.3 + eloDiff / 120, away: profile.perTeam - 1.3 - eloDiff / 130 };
+}
+
+
+/**
+ * Distribute a score across the periods of a sport. Deterministic per seed so
+ * a fixture never changes its half-time score between requests.
+ */
+function progressiveScore(sport: SportId, score: { home: number; away: number }, seed: string): Fixture['periods'] {
+  if (score.home + score.away <= 0) return undefined;
+  const split = (total: number, weights: number[]) => {
+    const raw = weights.map((w) => total * w);
+    const floors = raw.map((v) => Math.floor(v));
+    let remainder = total - floors.reduce((a, b) => a + b, 0);
+    const order = raw.map((v, i) => ({ i, frac: v - Math.floor(v) })).sort((a, b) => b.frac - a.frac);
+    for (const { i } of order) {
+      if (remainder <= 0) break;
+      floors[i] += 1;
+      remainder -= 1;
+    }
+    return floors;
+  };
+  const weightsFor = (count: number) => {
+    const raw = Array.from({ length: count }, (_, i) => 0.6 + seeded(`${seed}-p${i}`) * 0.8);
+    const sum = raw.reduce((a, b) => a + b, 0);
+    return raw.map((v) => v / sum);
+  };
+
+  if (sport === 'football') {
+    const [h1] = split(score.home, [0.44, 0.56]);
+    const [a1] = split(score.away, [0.44, 0.56]);
+    return [{ label: 'Half time', home: h1, away: a1 }];
   }
   if (sport === 'basketball') {
-    const base = home.leagueId === 'nba' ? 112.6 : home.leagueId === 'euroleague' ? 82.4 : 74.6;
-    const h = clamp(base * (home.attack / 1.06) * (away.defence / 1.02) + eloDiff / 22 + 2.6, base * 0.7, base * 1.35);
-    const a = clamp(base * (away.attack / 1.06) * (home.defence / 1.02) - eloDiff / 22, base * 0.68, base * 1.32);
-    return { home: h, away: a };
+    const hw = weightsFor(4);
+    const aw = weightsFor(4);
+    const hs = split(score.home, hw);
+    const as = split(score.away, aw);
+    return [
+      { label: 'Half time', home: hs[0] + hs[1], away: as[0] + as[1] },
+      ...hs.map((v, i) => ({ label: `Q${i + 1}`, home: v, away: as[i] }))
+    ];
+  }
+  if (sport === 'icehockey') {
+    const hs = split(score.home, weightsFor(3));
+    const as = split(score.away, weightsFor(3));
+    return hs.map((v, i) => ({ label: `Period ${i + 1}`, home: v, away: as[i] }));
   }
   if (sport === 'baseball') {
-    const h = clamp((home.attack / 1.03) * 4.55 * (away.defence / 1.02) * homeAdv + eloDiff / 260, 1.8, 8.4);
-    const a = clamp((away.attack / 1.03) * 4.4 * (home.defence / 1.02) - eloDiff / 280, 1.6, 8.2);
-    return { home: h, away: a };
+    const hs = split(score.home, weightsFor(9));
+    const as = split(score.away, weightsFor(9));
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ label: `Inn ${n}`, home: hs[n - 1], away: as[n - 1] }));
   }
-  // tennis — expected games won, used for game markets
-  return { home: 12.6 + eloDiff / 120, away: 10.9 - eloDiff / 130 };
+  if (sport === 'tennis') {
+    const best = 3;
+    const sets = Array.from({ length: best }, (_, i) => {
+      const winner = seeded(`${seed}-set${i}`) > 0.5 ? 'home' : 'away';
+      return { label: `Set ${i + 1}`, home: winner === 'home' ? 6 : 4, away: winner === 'home' ? 4 : 6 };
+    });
+    return sets;
+  }
+  return undefined;
 }
 
 function finalScore(sport: SportId, expected: { home: number; away: number }, seed: string) {
@@ -213,6 +309,11 @@ function makeFixture(leagueId: string, home: Team, away: Team, kickoff: Date, ro
     score = { home: liveH, away: liveA };
   }
 
+  // Progressive scores: split the total into the periods the sport plays,
+  // so "1-0 at half time" and "22-18 after the first quarter" are readable
+  // even on engine fixtures.
+  const periods = progressiveScore(sport, score, seed);
+
   const fixture: Fixture = {
     id: `fx_${hashString(seed).toString(36)}`,
     sport,
@@ -224,6 +325,7 @@ function makeFixture(leagueId: string, home: Team, away: Team, kickoff: Date, ro
     minute: status === 'live' || status === 'halftime' ? minute : undefined,
     period: status === 'live' || status === 'halftime' ? periodLabel(sport, minute ?? 0) : undefined,
     score,
+    periods,
     venue: venue(home),
     round,
     attendance: sport === 'football' ? Math.round(12_000 + seeded(seed + 'att') * 46_000) : undefined,

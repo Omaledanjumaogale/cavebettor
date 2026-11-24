@@ -4,6 +4,7 @@
   import { Sparkles, ArrowUpRight, TrendingUp, Target, ShieldCheck, Info, ChevronRight, CircleSlash, Layers, Zap } from '@lucide/svelte';
   import ConfidenceMeter from '#lib/components/ConfidenceMeter.svelte';
   import SectionHeader from '#lib/components/SectionHeader.svelte';
+  import AddToBetslip from '#lib/components/AddToBetslip.svelte';
   import { fmtNgn, signed, pct } from '#lib/engine/core';
   import { formatKickoff, countdown } from '#lib/format';
 
@@ -33,6 +34,7 @@
     </div>
     <div class="flex w-full items-center gap-2 sm:w-auto">
       <select class="input !w-auto !py-2 text-[11.5px]" bind:value={sort} onchange={() => update({ sort })} aria-label="Sort value bets">
+        <option value="probability">Sort: model probability</option>
         <option value="edge">Sort: model edge</option>
         <option value="confidence">Sort: confidence</option>
         <option value="odds">Sort: price</option>
@@ -83,7 +85,7 @@
               <span class="chip !text-[9px]">#{i + 1} · {bet.league}</span>
               <span class="num text-[9.5px] text-fog-dim">{countdown(bet.kickoff)} to KO</span>
             </div>
-            <div class="mt-3 truncate text-[10.5px] text-fog">{bet.homeShort} vs {bet.awayShort}</div>
+            <div class="mt-3 truncate text-[10.5px] text-fog">{bet.home} vs {bet.away}</div>
             <div class="mt-0.5 display text-[16px] font-bold leading-snug text-white">{bet.selection}</div>
             <div class="mt-0.5 text-[10.5px] text-fog-dim">{bet.market} · {bet.bookmaker}</div>
             <div class="mt-3 flex items-end justify-between">
@@ -115,7 +117,7 @@
         <div class="table-wrap">
           <table class="data-table">
             <thead>
-              <tr><th>Fixture</th><th>Selection</th><th class="text-right">Model</th><th class="text-right">Price</th><th class="text-right">Edge</th><th class="text-right">Stake</th><th></th></tr>
+              <tr><th>Fixture</th><th>Selection</th><th class="text-right">Model</th><th class="text-right">Price</th><th class="text-right">Edge</th><th class="text-right">Stake</th><th class="text-right">Slip</th><th></th></tr>
             </thead>
             <tbody>
               {#each data.bets as bet}
@@ -124,7 +126,7 @@
                     <div class="flex items-center gap-2">
                       <span class="h-4 w-1 shrink-0 rounded-full" style={`background:${bet.leagueColour}`}></span>
                       <div class="min-w-0">
-                        <div class="truncate text-[11.5px] font-medium text-white">{bet.homeShort} vs {bet.awayShort}</div>
+                        <div class="truncate text-[11.5px] font-medium text-white">{bet.home} vs {bet.away}</div>
                         <div class="text-[9.5px] text-fog-dim">{bet.league} · {formatKickoff(bet.kickoff)}</div>
                       </div>
                     </div>
@@ -137,6 +139,28 @@
                   <td class="num text-right text-[11.5px] font-semibold text-lime">{bet.odds.toFixed(2)}</td>
                   <td class="num text-right text-[11px] font-bold text-mint">+{(bet.edge * 100).toFixed(1)}%</td>
                   <td class="num text-right text-[10.5px] text-white/80">{fmtNgn(bet.stakeNgn)}</td>
+                  <td class="text-right">
+                    <span class="inline-flex justify-end">
+                      <AddToBetslip
+                        size="xs"
+                        leg={{
+                          fixtureId: bet.fixtureId,
+                          fixtureLabel: `${bet.home} vs ${bet.away}`,
+                          league: bet.league,
+                          sport: bet.sport,
+                          kickoff: bet.kickoff,
+                          marketId: bet.marketId ?? bet.market,
+                          marketLabel: bet.market,
+                          outcomeId: bet.outcomeId,
+                          label: bet.selection,
+                          odds: bet.odds,
+                          probability: bet.modelProbability,
+                          edge: bet.edge,
+                          bestBook: bet.bestBook
+                        }}
+                      />
+                    </span>
+                  </td>
                   <td class="text-right"><span class="chip !px-1.5 !py-0 !text-[8.5px] capitalize">{bet.risk}</span></td>
                 </tr>
               {/each}

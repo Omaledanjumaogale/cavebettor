@@ -49,6 +49,7 @@
     "convex": "latest",
     "convex-svelte": "latest",
     "date-fns": "latest",
+    "jspdf": "^2.5.2",
     "zod": "latest"
   },
   "imports": {

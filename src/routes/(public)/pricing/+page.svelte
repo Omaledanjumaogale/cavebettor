@@ -34,26 +34,29 @@
     }
   }
 
+  /** Only the free tier and Pro are sold. Owner access is internal. */
+  const publicPlans = SUBSCRIPTION_PLANS.filter((plan) => plan.id === 'starter' || plan.id === 'pro');
+
   const featureRows = [
-    { label: 'Fixtures and public probabilities', starter: true, pro: true, desk: true },
-    { label: 'Leagues tracked', starter: '3', pro: '20', desk: '20' },
-    { label: 'Markets per fixture', starter: '1X2', pro: 'All 84', desk: 'All 84' },
-    { label: 'Value board and Kelly staking', starter: false, pro: true, desk: true },
-    { label: 'Live in-play probabilities', starter: false, pro: true, desk: true },
-    { label: 'Odds comparison (8 books)', starter: 'Basic', pro: 'Full', desk: 'Full' },
-    { label: 'Model lab and self-training', starter: false, pro: true, desk: true },
-    { label: 'LLM match analyst', starter: '3 / month', pro: '1,000 / month', desk: '5,000 / month' },
-    { label: 'Data pipeline console', starter: false, pro: true, desk: true },
-    { label: 'API access', starter: '250 calls', pro: '25,000 calls', desk: '100,000 calls' },
-    { label: 'Shared workspace and seats', starter: '1 seat', pro: '1 seat', desk: '5 seats' },
-    { label: 'Webhooks and CSV export', starter: false, pro: true, desk: true },
-    { label: 'Role-based access and audit log', starter: false, pro: false, desk: true },
-    { label: 'Priority data-source slots', starter: false, pro: false, desk: true }
+    { label: 'Fixtures and public probabilities', starter: true, pro: true },
+    { label: 'Leagues tracked', starter: '3', pro: '20' },
+    { label: 'Markets per fixture', starter: '1X2', pro: 'All 84' },
+    { label: 'Value board and Kelly staking', starter: false, pro: true },
+    { label: 'Live in-play probabilities', starter: false, pro: true },
+    { label: 'Odds comparison (8 books)', starter: 'Basic', pro: 'Full' },
+    { label: 'Model lab and self-training', starter: false, pro: true },
+    { label: 'LLM match analyst', starter: '3 / month', pro: '5,000 / month' },
+    { label: 'Data pipeline console', starter: false, pro: true },
+    { label: 'API access', starter: '250 calls', pro: '100,000 calls' },
+    { label: 'Shared workspace and seats', starter: '1 seat', pro: '5 seats' },
+    { label: 'Webhooks and CSV export', starter: false, pro: true },
+    { label: 'Role-based access and audit log', starter: false, pro: true },
+    { label: 'Priority data-source slots', starter: false, pro: true }
   ];
 
   const faqs = [
     { q: 'Is CaveBettor a betting platform?', a: 'No. It is research software. You cannot deposit money, place a bet, or open a wallet. CaveBettor generates probabilities, compares market prices and records paper selections so you can evaluate the model.' },
-    { q: 'Why ₦5,000 per month?', a: 'One price unlocks every feature: all sports, all leagues, all markets, live probabilities, the model lab, the data pipeline and the analyst. Trading Desk adds five seats and collaboration for the same ₦5,000 per seat.' },
+    { q: 'Why ₦5,000 per month?', a: 'One price unlocks every feature: all sports, all leagues, all markets, live probabilities, the model lab, the data pipeline and the analyst. Every desk feature — five seats, the shared decision log, webhooks, priority data slots and role-based access — is included in Pro at no extra cost.' },
     { q: 'Do you guarantee winnings?', a: 'No, and any product that does is lying. Probabilities are estimates. Variance is real. CaveBettor publishes its calibration, ROI, yield and drawdown — including losing months — so you can judge the process.' },
     { q: 'Where does the data come from?', a: 'Public fixture and team data, licensed sports APIs when you supply keys, and permission-aware collectors. Each source has a health status and a coverage score in the pipeline console. Live scraping is opt-in.' },
     { q: 'Can I use it from outside Nigeria?', a: 'Yes. The interface is global, but the primary currency is the Nigerian Naira and the commercial plan is priced in NGN. You can change the display currency in Settings.' },
@@ -85,7 +88,7 @@
   {/if}
 
   <div class="grid gap-3 lg:grid-cols-3">
-    {#each SUBSCRIPTION_PLANS as plan}
+    {#each publicPlans as plan}
       <div class={`panel relative overflow-hidden p-5 ${plan.featured ? 'border-lime/30' : ''}`}>
         {#if plan.featured}
           <div class="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-lime to-transparent"></div>
@@ -99,7 +102,7 @@
         </div>
         <div class="mt-0.5 text-[9.5px] text-fog-dim">{plan.priceNgn === 0 ? 'Explore with public data' : annual ? `Equivalent to ${fmtNgn(plan.priceNgn)} / month` : 'Per seat, billed monthly in NGN'}</div>
         <button onclick={() => checkout(plan.id)} class={`mt-4 w-full ${plan.featured ? 'btn btn-primary' : 'btn btn-ghost'} !py-2.5 text-[11.5px]`} disabled={loading}>
-          {plan.id === 'starter' ? 'Start free' : plan.featured ? 'Unlock everything — ₦5,000' : 'Choose Trading Desk'}
+          {plan.id === 'starter' ? 'Start free' : 'Unlock everything — ₦5,000'}
         </button>
         <div class="mt-4 space-y-2">
           {#each plan.features as feature}
@@ -120,12 +123,12 @@
     </div>
     <div class="table-wrap mt-2">
       <table class="data-table">
-        <thead><tr><th>Capability</th><th class="text-center">Starter</th><th class="text-center text-lime">Pro</th><th class="text-center">Trading Desk</th></tr></thead>
+        <thead><tr><th>Capability</th><th class="text-center">Starter</th><th class="text-center text-lime">Pro</th></tr></thead>
         <tbody>
           {#each featureRows as row}
             <tr>
               <td class="text-[10.5px] text-white/80">{row.label}</td>
-              {#each [row.starter, row.pro, row.desk] as value}
+              {#each [row.starter, row.pro] as value}
                 <td class="text-center">
                   {#if value === true}<Check size={12} class="mx-auto text-mint" />{:else if value === false}<X size={12} class="mx-auto text-fog-dim/60" />{:else}<span class="text-[9.5px] text-fog">{value}</span>{/if}
                 </td>
@@ -162,7 +165,7 @@
       </div>
       <div class="panel p-4">
         <div class="flex items-center gap-2"><Building2 size={15} class="text-sky" /><h3 class="text-[12px] font-semibold text-white">For syndicates and desks</h3></div>
-        <p class="mt-1.5 text-[10.5px] leading-relaxed text-fog">Trading Desk includes five seats, a shared decision log, webhook exports, priority data-source slots and role-based access. Need more seats? ₦5,000 per seat per month, pro-rated.</p>
+        <p class="mt-1.5 text-[10.5px] leading-relaxed text-fog">Pro includes five seats, a shared decision log, webhook exports, priority data-source slots and role-based access — the desk features are no longer a separate plan. Need more seats? ₦5,000 per seat per month, pro-rated.</p>
         <a href="/settings" class="mt-2 inline-flex items-center gap-1 text-[10.5px] font-semibold text-lime hover:underline">Talk to the desk <ArrowUpRight size={10} /></a>
       </div>
       <div class="rounded-xl border border-white/[0.07] bg-black/20 p-3 text-[9.5px] leading-relaxed text-fog-dim">

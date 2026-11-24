@@ -58,7 +58,7 @@
         <TeamBadge team={selected.away} size={38} />
       </div>
       <div class="w-full min-w-0 flex-1 sm:max-w-sm">
-        <ProbabilityBar home={selected.probabilities.home} draw={selected.probabilities.draw} away={selected.probabilities.away} homeLabel={selected.home.shortName} awayLabel={selected.away.shortName} compact />
+        <ProbabilityBar home={selected.probabilities.home} draw={selected.probabilities.draw} away={selected.probabilities.away} homeLabel={selected.home.name} awayLabel={selected.away.name} compact />
         <div class="mt-1.5 flex justify-between text-[9.5px] text-fog-dim">
           <span>Model {selected.confidence}% confidence</span>
           <span>Priced {relativeTime(selected.generatedAt)}</span>

@@ -15,6 +15,8 @@ export const load: PageServerLoad = async ({ url }) => {
   const q = (url.searchParams.get('q') ?? '').toLowerCase();
   const view = url.searchParams.get('view') === 'table' ? 'table' : 'grid';
   const day = url.searchParams.get('day') ?? 'all';
+  // Kick-off window: "next hour" through "next 24 hours".
+  const within = url.searchParams.get('within') ?? 'all';
   const page = Math.max(1, Number(url.searchParams.get('page') ?? '1') || 1);
 
   const [universe, cards, meta] = await Promise.all([pageFixtureUniverse(), liveCards(), feedMeta()]);
@@ -24,13 +26,25 @@ export const load: PageServerLoad = async ({ url }) => {
   const today = new Date().toISOString().slice(0, 10);
   const days = [...new Set(all.map((f) => dayKey(f.kickoff)))].sort();
 
+  const WINDOWS: Record<string, number> = { '1h': 1, '3h': 3, '6h': 6, '12h': 12, '24h': 24 };
+  const windowHours = WINDOWS[within] ?? 0;
+  const now = Date.now();
+
   const filtered = all.filter((f) => {
     if (sport !== 'all' && f.sport !== sport) return false;
     if (league !== 'all' && f.leagueId !== league) return false;
     if (day !== 'all' && dayKey(f.kickoff) !== day) return false;
+    // "All fixtures" means everything still to play or in play — results live
+    // in the Finished tab, never in the upcoming list.
+    if (status === 'all' && f.status === 'finished') return false;
     if (status === 'live' && f.status !== 'live' && f.status !== 'halftime') return false;
     if (status === 'upcoming' && f.status !== 'scheduled') return false;
     if (status === 'finished' && f.status !== 'finished') return false;
+    if (windowHours) {
+      const kickoff = +new Date(f.kickoff);
+      if (f.status === 'finished') return false;
+      if (f.status === 'scheduled' && (kickoff < now || kickoff > now + windowHours * 3_600_000)) return false;
+    }
     if (q) {
       const hay = `${homeTeam(f).name} ${awayTeam(f).name} ${fixtureLeague(f).name}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -44,7 +58,13 @@ export const load: PageServerLoad = async ({ url }) => {
   const window = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   const rows = window
     .map((fixture) => ({ fixture, prediction: cards?.[fixture.id] ?? cardOf(getPrediction(fixture)) }))
-    .filter((row) => (status === 'value' ? row.prediction.valueBets.length > 0 : true));
+    .filter((row) => (status === 'value' ? row.prediction.valueBets.length > 0 : true))
+    // Ranked by the model's own probability: the most likely calls lead the page.
+    .sort((a, b) => {
+      const top = (row: (typeof rows)[number]) =>
+        Math.max(row.prediction.probabilities.home, row.prediction.probabilities.draw, row.prediction.probabilities.away);
+      return top(b) - top(a);
+    });
 
   // Every competition that actually has fixtures — provider leagues included.
   const leagueCounts = new Map<string, { id: string; name: string; shortName: string; sport: string; country: string; colour: string; count: number }>();
@@ -86,7 +106,7 @@ export const load: PageServerLoad = async ({ url }) => {
   const finished = all.filter((f) => f.status === 'finished').length;
 
   return {
-    filters: { sport, league, status, q, view, day },
+    filters: { sport, league, status, q, view, day, within },
     total: all.length,
     filteredTotal: filtered.length,
     stats: { live, upcoming, finished, leagues: leagueCounts.size, provider: universe.source === 'provider' },

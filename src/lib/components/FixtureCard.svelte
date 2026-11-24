@@ -6,6 +6,7 @@
   import { countdown, formatDate, formatKickoff, formatTime } from '#lib/format';
   import TeamBadge from './TeamBadge.svelte';
   import ProbabilityBar from './ProbabilityBar.svelte';
+  import ScoreProgression from './ScoreProgression.svelte';
   import ConfidenceMeter from './ConfidenceMeter.svelte';
 
   let { fixture, prediction, compact = false }: { fixture: Fixture; prediction: PredictionCard; compact?: boolean } = $props();
@@ -58,6 +59,10 @@
       <span class={`num shrink-0 text-[17px] font-bold ${finished || live ? 'text-white' : 'text-fog-dim'}`}>{finished || live ? fixture.score.away : ''}</span>
     </div>
   </div>
+
+  {#if live || finished}
+    <div class="mt-2.5"><ScoreProgression {fixture} compact limit={6} /></div>
+  {/if}
 
   <div class="mt-3.5">
     <ProbabilityBar

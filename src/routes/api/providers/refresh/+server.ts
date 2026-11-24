@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { refreshLearning } from '#lib/server/learning';
 import { syncSecret } from '#lib/server/live';
 import { FEED_SPORTS, feedMeta, mergedFixtures, refreshProviderFeed, refreshLiveNow } from '#lib/server/feed';
 import { refreshMarketPrices } from '#lib/server/providers/marketFeed';
@@ -131,6 +132,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     markets = { provider: bundle.provider, prices: bundle.prices.length };
   }
 
+  // Settled fixtures train the model. This runs at most once every twenty
+  // minutes (memoised) and never blocks the collection response on failure.
+  const learning = await refreshLearning().catch(() => null);
+
   const [snapshot, sportsUsage, meta] = await Promise.all([budgetSnapshot(), apiFootballSportUsage(), feedMeta()]);
 
   return json({
@@ -144,6 +149,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     budgets: snapshot,
     apiFootballBySport: sportsUsage,
     providerCalls: recentProviderCalls(),
+    learning: learning
+      ? { settled: learning.settled, accuracy: learning.accuracy, buckets: learning.buckets.length, generatedAt: learning.generatedAt }
+      : null,
     durationMs: Date.now() - started,
     storage: 'r2',
     at: new Date().toISOString()

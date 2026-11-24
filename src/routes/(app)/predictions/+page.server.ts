@@ -16,7 +16,9 @@ const boardMemo = new Map<string, { at: number; payload: any }>();
 
 export const load: PageServerLoad = async ({ url }) => {
   const sport = url.searchParams.get('sport') ?? 'all';
-  const sort = url.searchParams.get('sort') ?? 'edge';
+  // Model probability first: the board is ordered by how likely a selection
+  // is to settle, not by how short its price is.
+  const sort = url.searchParams.get('sort') ?? 'probability';
   const memoKey = `${sport}|${sort}`;
   const memo = boardMemo.get(memoKey);
   if (memo && Date.now() - memo.at < BOARD_MEMO_MS) return memo.payload;
@@ -50,12 +52,10 @@ export const load: PageServerLoad = async ({ url }) => {
         kickoff: fixture.kickoff,
         status: fixture.status,
         sport: fixture.sport,
-        league: league.shortName,
+        league: league.name,
         leagueColour: league.colour,
         home: homeTeam(fixture).name,
         away: awayTeam(fixture).name,
-        homeShort: homeTeam(fixture).shortName,
-        awayShort: awayTeam(fixture).shortName,
         modelConfidence: card.confidence,
         risk: bet.modelProbability > 0.6 ? 'low' : bet.modelProbability > 0.4 ? 'medium' : 'high'
       });
@@ -73,12 +73,10 @@ export const load: PageServerLoad = async ({ url }) => {
           kickoff: fixture.kickoff,
           status: fixture.status,
           sport: fixture.sport,
-          league: league.shortName,
+          league: league.name,
           leagueColour: league.colour,
           home: homeTeam(fixture).name,
           away: awayTeam(fixture).name,
-          homeShort: homeTeam(fixture).shortName,
-          awayShort: awayTeam(fixture).shortName,
           modelConfidence: prediction.confidence,
           risk: bet.modelProbability > 0.6 ? 'low' : bet.modelProbability > 0.4 ? 'medium' : 'high'
         });
@@ -87,17 +85,18 @@ export const load: PageServerLoad = async ({ url }) => {
   }
 
   const sorted = [...bets].sort((a, b) => {
+    if (sort === 'edge') return b.edge - a.edge;
     if (sort === 'confidence') return b.confidence - a.confidence;
     if (sort === 'odds') return b.odds - a.odds;
     if (sort === 'time') return +new Date(a.kickoff) - +new Date(b.kickoff);
-    return b.edge - a.edge;
+    return b.modelProbability - a.modelProbability || b.edge - a.edge;
   });
 
   const uniqueFixtures = new Map<string, any>();
-  for (const bet of [...bets].sort((a, b) => b.edge - a.edge)) {
+  for (const bet of [...bets].sort((a, b) => b.modelProbability - a.modelProbability)) {
     if (!uniqueFixtures.has(bet.fixtureId)) uniqueFixtures.set(bet.fixtureId, bet);
   }
-  const acca = [...uniqueFixtures.values()].slice(0, 3).map((b) => ({ selection: b.selection, odds: b.odds, fixture: `${b.homeShort} vs ${b.awayShort}`, probability: b.modelProbability, fixtureId: b.fixtureId }));
+  const acca = [...uniqueFixtures.values()].slice(0, 3).map((b) => ({ selection: b.selection, odds: b.odds, fixture: `${b.home} vs ${b.away}`, probability: b.modelProbability, fixtureId: b.fixtureId }));
   const accaOdds = round(acca.reduce((a, b) => a * b.odds, 1), 2);
   const accaProbability = round(acca.reduce((a, b) => a * b.probability, 1), 4);
 
@@ -129,7 +128,7 @@ export const load: PageServerLoad = async ({ url }) => {
       .map((f) => ({
         fixtureId: f.id,
         kickoff: f.kickoff,
-        league: fixtureLeague(f).shortName,
+        league: fixtureLeague(f).name,
         home: resolveTeam(f.homeId, f.leagueId).name,
         away: resolveTeam(f.awayId, f.leagueId).name,
         confidence: cardFor(f).confidence,

@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import { DATA_SOURCES, MODELS } from '#lib/data/catalog';
 import { getMetrics, getScrapeJobs, getTrainingRuns } from '#lib/engine/analytics';
 import { convexAdminOverview, syncLiveData } from '#lib/server/live';
+import { readLearning, refreshLearning } from '#lib/server/learning';
 import { providerConfigured } from '#lib/server/auth';
 import { env as privateEnv } from '$env/dynamic/private';
 import type { Actions, PageServerLoad } from './$types';
@@ -10,14 +11,17 @@ export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.user || locals.user.role !== 'super_admin') redirect(303, '/auth/admin?next=/admin');
   const overview: any = await convexAdminOverview();
   const metrics = getMetrics();
+  // The learning loop is part of the console: settled results, the calibration
+  // table and how much the model has corrected itself.
+  const learning = (await readLearning().catch(() => null)) ?? null;
   const users = [
     { name: 'Omale Danjuma', email: 'omale@cavebettor.ng', plan: 'Pro', status: 'active', workspace: 'Lagos Value Desk', joined: '2025-08-14', apiCalls: 18420 },
-    { name: 'Amara Eze', email: 'amara@cavebettor.ng', plan: 'Trading Desk', status: 'active', workspace: 'Lagos Value Desk', joined: '2025-09-02', apiCalls: 9120 },
+    { name: 'Amara Eze', email: 'amara@cavebettor.ng', plan: 'Pro', status: 'active', workspace: 'Lagos Value Desk', joined: '2025-09-02', apiCalls: 9120 },
     { name: 'Tunde Balogun', email: 'tunde@cavebettor.ng', plan: 'Pro', status: 'active', workspace: 'Abuja Analytics', joined: '2025-10-11', apiCalls: 6420 },
     { name: 'Chidi Okonkwo', email: 'chidi@example.ng', plan: 'Pro', status: 'trialing', workspace: 'Port Harcourt Desk', joined: '2026-01-22', apiCalls: 2140 },
     { name: 'Fatima Bello', email: 'fatima@example.ng', plan: 'Starter', status: 'active', workspace: 'Kano Research', joined: '2026-02-03', apiCalls: 182 },
     { name: 'Kwame Mensah', email: 'kwame@example.gh', plan: 'Pro', status: 'past_due', workspace: 'Accra Value', joined: '2025-12-08', apiCalls: 3210 },
-    { name: 'Zainab Musa', email: 'zainab@example.ng', plan: 'Trading Desk', status: 'active', workspace: 'Lagos Syndicate', joined: '2025-11-19', apiCalls: 24800 },
+    { name: 'Zainab Musa', email: 'zainab@example.ng', plan: 'Pro', status: 'active', workspace: 'Lagos Syndicate', joined: '2025-11-19', apiCalls: 24800 },
     { name: 'Segun Adeyemi', email: 'segun@example.ng', plan: 'Pro', status: 'cancelled', workspace: 'Ibadan Quant', joined: '2025-07-01', apiCalls: 440 }
   ];
 
@@ -41,6 +45,17 @@ export const load: PageServerLoad = async ({ locals }) => {
   ];
   return {
     adminUser: locals.user,
+    learning:
+      learning === null
+        ? null
+        : {
+            settled: learning.settled,
+            accuracy: learning.accuracy,
+            generatedAt: learning.generatedAt,
+            buckets: learning.buckets,
+            sports: learning.sports,
+            sample: learning.sample.slice(0, 6)
+          },
     integrations,
     live: overview,
     metrics,
@@ -70,6 +85,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 
 export const actions: Actions = {
+  learn: async ({ locals }) => {
+    if (!locals.user || locals.user.role !== 'super_admin') return { ok: false, message: 'Owner access required.' };
+    try {
+      const report = await refreshLearning(true);
+      return {
+        ok: true,
+        message: `Retrained calibration on all settled fixtures: ${report.settled} graded selections, ${(report.accuracy * 100).toFixed(1)}% hit rate.`
+      };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'Learning run failed.' };
+    }
+  },
   sync: async ({ locals }) => {
     if (!locals.user || locals.user.role !== 'super_admin') return { ok: false, message: 'Owner access required.' };
     try {

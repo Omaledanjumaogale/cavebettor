@@ -409,7 +409,7 @@
       {#each data.leagues as league}
         <a href={`/fixtures?league=${league.id}`} class="group flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 py-1.5 text-[10.5px] text-fog transition hover:border-lime/25 hover:text-white">
           <span class="h-2 w-2 rounded-sm" style={`background:${league.colour}`}></span>
-          {league.shortName}
+          {league.name}
           <span class="text-fog-dim">{league.countryCode}</span>
           {#if league.fixtures > 0}<span class="num rounded bg-white/[0.06] px-1 text-[9px] text-white/60">{league.fixtures}</span>{/if}
         </a>
