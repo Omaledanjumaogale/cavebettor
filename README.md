@@ -75,7 +75,12 @@ npm run assets:unique   # one-visual-per-placement guard
 npm run assets:check    # asset pipeline validation
 npm run verify:static   # assert the public pages exist as static HTML
 npm run production:verify  # verify assets and routes on the live domain
+npm run ci              # assets:unique + assets:check + check + test + build
 ```
+
+The GitHub Actions workflow that mirrors `npm run ci` and publishes to Cloudflare lives at
+`.github/workflows/ci.yml`. It needs a push token with the `workflow` scope
+(`gh auth refresh -s workflow`); until then the same checks run locally with `npm run ci`.
 
 ### Static-first delivery
 

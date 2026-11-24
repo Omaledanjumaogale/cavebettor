@@ -6,7 +6,7 @@
   "description": "CaveBettor â€” harmonised sports prediction, odds intelligence and bankroll analytics workspace.",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && npm run verify:static",
+    "build": "node scripts/write-build-info.mjs && vite build && npm run verify:static",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
@@ -21,7 +21,8 @@
     "verify:static": "node scripts/verify-static-pages.mjs",
     "production:verify": "node scripts/verify-production.mjs",
     "deploy:cloudflare": "npm run build && wrangler deploy --config wrangler.worker.jsonc",
-    "deploy:pages": "npm run build && wrangler pages deploy .svelte-kit/cloudflare --project-name cavebettor --branch main"
+    "deploy:pages": "npm run build && wrangler pages deploy .svelte-kit/cloudflare --project-name cavebettor --branch main",
+    "ci": "npm run assets:unique && npm run assets:check && npm run check && npm test && npm run build"
   },
   "devDependencies": {
     "@cloudflare/workerd-windows-64": "^1.20261119.1",
