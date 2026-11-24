@@ -46,6 +46,8 @@ export interface Team {
   xgAgainst: number;
   cleanSheets: number;
   badges: string[];
+  /** Provider crest URL when the team came from a live feed. */
+  logo?: string;
 }
 
 export type FormResult = 'W' | 'D' | 'L';

@@ -1,44 +1,52 @@
-import { readCache, writeCacheIfChanged } from '#lib/server/cache';
-import { fetchLiveFixtures, fetchSportFixtures, rotateLeagues, type ApiFootballSport } from '#lib/server/providers/apiFootball';
+import { readCache, writeCache, writeCacheIfChanged } from '#lib/server/cache';
+import { fetchSportDay, fetchSportLive, isoDate, type ApiFootballSport } from '#lib/server/providers/apiFootball';
 import { normaliseProviderFixtures } from '#lib/server/providers/normalise';
+import { registerLeague, registerTeam } from '#lib/data/registry';
 import { getFixtures } from '#lib/engine/fixtures';
-import type { Fixture } from '#lib/types';
+import type { Fixture, SportId } from '#lib/types';
 
 /**
  * Live feed.
  *
- * Provider fixtures are cached in the Cloudflare R2 data plane and merged
- * with the deterministic engine output. The merge is:
+ * Collection strategy
+ * -------------------
+ * Every sport is asked for *whole days* rather than individual leagues:
  *
- *   live provider fixture  → replaces the engine fixture for that match
- *   engine fixture only    → kept (covers cups, friendlies and everything the
- *                            free provider plan does not list)
+ *   GET /fixtures?date=YYYY-MM-DD   (football)
+ *   GET /games?date=YYYY-MM-DD      (basketball, hockey, NBA, baseball)
  *
- * Refresh work never happens on a page request: it is driven by the scheduled
- * Cloudflare worker, so user traffic does not consume the 100/day
- * API-Football allowance.
+ * One request returns every competition the provider covers for that day, so
+ * a full global snapshot costs five requests and includes major and minor
+ * leagues, cups and tournaments alike. The window is yesterday → tomorrow
+ * plus a live sweep, i.e. ~20 requests for the whole world.
+ *
+ * Everything is cached in the R2 data plane. Page loads never make a provider
+ * call; the background revalidation below refreshes the cache when it goes
+ * stale, gated by the daily budget ledger.
  */
 
 export const FEED_SPORTS: ApiFootballSport[] = ['football', 'basketball', 'icehockey', 'nba', 'baseball'];
 
 const FEED_KEY = 'feed/fixtures';
-const FEED_TTL = 20 * 60_000;
+const META_KEY = 'feed/meta';
+const LIVE_KEY = 'feed/live';
+const LOCK_KEY = 'feed/lock';
 
-/**
- * Competitions requested per sport per collection cycle.
- *
- * The API-Football allowance is 100 requests a day for the whole account.
- * Football alone lists ten competitions, so asking for all of them every
- * cycle would burn the day. Each cycle takes a slice and the slice rotates,
- * which keeps three collections a day at roughly 20 requests in total.
- */
-const LEAGUES_PER_CYCLE: Record<ApiFootballSport, number> = {
-  football: 5,
-  basketball: 2,
-  icehockey: 1,
-  nba: 1,
-  baseball: 1
-};
+/** How long a collected feed is considered fresh for page rendering. */
+export const FEED_TTL = 20 * 60_000;
+/** Minimum gap between two background collections, per isolate and globally. */
+const REVALIDATE_FLOOR = 10 * 60_000;
+
+export interface FeedMeta {
+  generatedAt: string;
+  fixtureCount: number;
+  liveCount: number;
+  leagues: number;
+  sports: Record<string, number>;
+  window: { from: string; to: string };
+  requests: number;
+  source: 'api-football';
+}
 
 export interface FeedBundle {
   generatedAt: string;
@@ -48,64 +56,143 @@ export interface FeedBundle {
   sports: string[];
 }
 
-/** Refresh the provider fixture set. Called by the scheduled worker only. */
-export async function refreshProviderFeed(): Promise<{ provider: number; rejected: number; sports: string[]; requests: number }> {
-  const all: Fixture[] = [];
-  let rejected = 0;
-  let requests = 0;
-  const sports: string[] = [];
+/** Days collected on every full refresh, relative to today. */
+const DAY_WINDOW = [-1, 0, 1, 2] as const;
 
-  // The cycle index rotates the competitions each sport asks for.
-  const cycle = Number(process.env.CAVEBETTOR_COLLECT_CYCLE ?? '') || Math.floor(Date.now() / (12 * 3600_000));
-
-  for (const sport of FEED_SPORTS) {
-    const leagues = rotateLeagues(sport, cycle, LEAGUES_PER_CYCLE[sport]);
-    const rows = await fetchSportFixtures(sport, 2025, leagues);
-    requests += leagues.length + 1; // + the live call below
-    if (!rows.length) continue;
-    const mapped = normaliseProviderFixtures(rows, sport);
-    all.push(...mapped.fixtures);
-    rejected += mapped.rejected;
-    sports.push(sport);
+/**
+ * Re-register teams and leagues that arrived inline on cached provider
+ * fixtures, so every legacy `TEAM_MAP[...]` / `LEAGUE_MAP[...]` lookup in the
+ * app resolves real squads after a cold start.
+ */
+function hydrateRegistry(fixtures: Fixture[]): void {
+  for (const fixture of fixtures) {
+    if (fixture.league) registerLeague(fixture.league);
+    if (fixture.homeTeam) registerTeam(fixture.homeTeam);
+    if (fixture.awayTeam) registerTeam(fixture.awayTeam);
   }
-
-  await writeCacheIfChanged(FEED_KEY, all, 6 * 3600_000, 'api-football');
-  return { provider: all.length, rejected, sports, requests };
 }
 
-/** Read the cached provider fixtures. Never performs a network call. */
-export async function readProviderFixtures(): Promise<Fixture[]> {
-  const cached = await readCache<Fixture[]>(FEED_KEY, true);
-  return cached?.value ?? [];
+function dedupe(fixtures: Fixture[]): Fixture[] {
+  const byId = new Map<string, Fixture>();
+  for (const fixture of fixtures) {
+    const existing = byId.get(fixture.id);
+    // Prefer the row with a score / live status when duplicates arrive from
+    // the day sweep and the live sweep.
+    if (!existing) {
+      byId.set(fixture.id, fixture);
+      continue;
+    }
+    const richer = fixture.status === 'live' || fixture.status === 'halftime' ? fixture : existing;
+    byId.set(fixture.id, { ...existing, ...richer });
+  }
+  return [...byId.values()];
 }
 
 /**
- * Merged fixture universe: live provider fixtures first, engine fixtures as
- * the fallback so the workspace is never empty.
+ * Collect a full provider snapshot. Called by the scheduled worker and by the
+ * guarded background revalidation — never directly by a page load.
  */
-export async function mergedFixtures(): Promise<{ fixtures: Fixture[]; providerCount: number }> {
-  const provider = await readProviderFixtures();
-  if (!provider.length) {
-    return { fixtures: getFixtures(), providerCount: 0 };
+export async function refreshProviderFeed(options: { liveOnly?: boolean } = {}): Promise<FeedMeta> {
+  const collected: Fixture[] = [];
+  const sports: Record<string, number> = {};
+  let requests = 0;
+
+  const days = options.liveOnly ? [] : DAY_WINDOW.map((offset) => isoDate(offset));
+
+  for (const sport of FEED_SPORTS) {
+    for (const day of days) {
+      const result = await fetchSportDay(sport, day);
+      requests += 1;
+      if (!result.rows.length) continue;
+      const mapped = normaliseProviderFixtures(result.rows, sport);
+      if (mapped.fixtures.length) {
+        collected.push(...mapped.fixtures);
+        sports[sport] = (sports[sport] ?? 0) + mapped.fixtures.length;
+      }
+    }
+    const live = await fetchSportLive(sport);
+    requests += 1;
+    if (live.rows.length) {
+      const mapped = normaliseProviderFixtures(live.rows, sport);
+      if (mapped.fixtures.length) {
+        collected.push(...mapped.fixtures);
+        sports[sport] = (sports[sport] ?? 0) + mapped.fixtures.length;
+      }
+    }
   }
-  const providerKeys = new Set(provider.map((f) => `${f.homeId}|${f.awayId}`));
-  const engineOnly = getFixtures().filter((f) => !providerKeys.has(`${f.homeId}|${f.awayId}`));
-  const fixtures = [...provider, ...engineOnly].sort(
-    (a, b) => +new Date(a.kickoff) - +new Date(b.kickoff)
-  );
-  return { fixtures, providerCount: provider.length };
+
+  const fixtures = dedupe(collected).sort((a, b) => +new Date(a.kickoff) - +new Date(b.kickoff));
+  const meta: FeedMeta = {
+    generatedAt: new Date().toISOString(),
+    fixtureCount: fixtures.length,
+    liveCount: fixtures.filter((f) => f.status === 'live' || f.status === 'halftime').length,
+    leagues: new Set(fixtures.map((f) => f.leagueId)).size,
+    sports,
+    window: { from: days[0] ?? isoDate(0), to: days[days.length - 1] ?? isoDate(0) },
+    requests,
+    source: 'api-football'
+  };
+
+  if (fixtures.length) {
+    hydrateRegistry(fixtures);
+    await writeCacheIfChanged(FEED_KEY, fixtures, 6 * 3600_000, 'api-football');
+  }  await writeCache(META_KEY, meta, 6 * 3600_000, 'api-football');
+  return meta;
+}
+
+/** Read the cached provider fixtures with the latest live sweep overlaid. */
+export async function readProviderFixtures(): Promise<Fixture[]> {
+  const [cached, live] = await Promise.all([readCache<Fixture[]>(FEED_KEY, true), readCache<Fixture[]>(LIVE_KEY, true)]);
+  const fixtures = Array.isArray(cached?.value) ? cached.value.slice() : [];
+  const liveRows = Array.isArray(live?.value) ? live.value : [];
+
+  if (liveRows.length) {
+    // The live sweep is authoritative for in-play score/clock, and can also
+    // introduce matches that started after the last full collection.
+    const byId = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
+    for (const row of liveRows) byId.set(row.id, { ...(byId.get(row.id) ?? {}), ...row });
+    fixtures.length = 0;
+    fixtures.push(...byId.values());
+  }
+
+  if (fixtures.length) hydrateRegistry(fixtures);
+  return fixtures;
+}
+
+export async function feedMeta(): Promise<(FeedMeta & { ageMs: number; stale: boolean }) | null> {
+  const meta = await readCache<FeedMeta>(META_KEY, true);
+  if (!meta) return null;
+  const ageMs = Date.now() - Date.parse(meta.value.generatedAt);
+  return { ...meta.value, ageMs, stale: ageMs > FEED_TTL };
+}
+
+/**
+ * Merged fixture universe: real provider fixtures first, engine fixtures kept
+ * only where the provider has nothing (never to pad the live board).
+ */
+export async function mergedFixtures(): Promise<{
+  fixtures: Fixture[];
+  providerCount: number;
+  source: 'provider' | 'engine';
+}> {
+  const provider = await readProviderFixtures();
+  if (!provider.length) return { fixtures: getFixtures(), providerCount: 0, source: 'engine' };
+
+  const providerTeams = new Set<string>();
+  for (const fixture of provider) {
+    providerTeams.add(`${fixture.homeId}|${fixture.awayId}`);
+  }
+  const engineOnly = getFixtures().filter((f) => !providerTeams.has(`${f.homeId}|${f.awayId}`));
+  const fixtures = [...provider, ...engineOnly].sort((a, b) => +new Date(a.kickoff) - +new Date(b.kickoff));
+  return { fixtures, providerCount: provider.length, source: 'provider' };
 }
 
 /** Live-now bundle used by the live centre. */
 export async function liveFeed(): Promise<Fixture[]> {
-  const cached = await readCache<Fixture[]>(FEED_KEY, true);
-  const provider = cached?.value ?? [];
+  const provider = await readProviderFixtures();
   const engine = getFixtures();
   const byId = new Map<string, Fixture>();
-  for (const f of [...provider, ...engine]) {
-    const key = `${f.homeId}|${f.awayId}`;
-    byId.set(key, f);
-  }
+  for (const f of [...engine, ...provider]) byId.set(f.id, f);
   return [...byId.values()]
     .filter((f) => f.status === 'live' || f.status === 'halftime')
     .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
@@ -117,7 +204,10 @@ export async function liveFeed(): Promise<Fixture[]> {
  * Priority: R2 provider feed (real schedules) → Convex snapshot → local
  * engine. Every branch is free: no provider request is made here.
  */
-export async function pageFixtureUniverse(): Promise<{ fixtures: Fixture[]; source: 'provider' | 'convex' | 'engine' }> {
+export async function pageFixtureUniverse(): Promise<{
+  fixtures: Fixture[];
+  source: 'provider' | 'convex' | 'engine';
+}> {
   const feed = await mergedFixtures();
   if (feed.providerCount > 0) return { fixtures: feed.fixtures, source: 'provider' };
 
@@ -128,11 +218,90 @@ export async function pageFixtureUniverse(): Promise<{ fixtures: Fixture[]; sour
   return { fixtures: getFixtures(), source: 'engine' };
 }
 
-/** Fetch live-now provider rows directly (scheduled refresh path). */
-export async function refreshLiveNow(): Promise<number> {
-  const rows = [];
-  for (const sport of FEED_SPORTS) {
-    rows.push(...(await fetchLiveFixtures(sport)));
+/* ── background revalidation ─────────────────────────────────────────────── */
+
+let lastAttempt = 0;
+let inFlight: Promise<unknown> | null = null;
+
+/**
+ * Stale-while-revalidate for the provider feed.
+ *
+ * Called from the request hook. It never blocks the response: when the feed
+ * is missing or stale it schedules a collection on `waitUntil`, guarded by an
+ * in-isolate floor and a cache lock so concurrent requests (and isolates)
+ * cannot multiply provider spend.
+ *
+ * Returns true when a refresh was scheduled.
+ */
+export async function revalidateFeed(
+  waitUntil: ((promise: Promise<unknown>) => void) | undefined,
+  options: { force?: boolean } = {}
+): Promise<boolean> {
+  const now = Date.now();
+  if (!options.force && now - lastAttempt < REVALIDATE_FLOOR) return false;
+
+  const meta = await feedMeta();
+  if (!options.force && meta && !meta.stale && meta.fixtureCount > 0) return false;
+
+  if (!options.force) {
+    const lock = await readCache<number>(LOCK_KEY, false);
+    if (lock) return false;
   }
-  return rows.length;
+  lastAttempt = now;
+
+  const run = (async () => {
+    try {
+      await writeCache(LOCK_KEY, now, REVALIDATE_FLOOR, 'api-football');
+      await refreshProviderFeed();
+    } catch {
+      /* the feed keeps serving its last good snapshot */
+    } finally {
+      inFlight = null;
+    }
+  })();
+
+  inFlight = run;
+  if (waitUntil) waitUntil(run);
+  return true;
+}
+
+export function feedRefreshing(): boolean {
+  return inFlight !== null;
+}
+
+/** Sweep every sport's live endpoint and cache the in-play rows. */
+export async function refreshLiveNow(): Promise<number> {
+  const live: Fixture[] = [];
+  for (const sport of FEED_SPORTS) {
+    try {
+      const result = await fetchSportLive(sport);
+      if (!result.rows.length) continue;
+      const mapped = normaliseProviderFixtures(result.rows, sport);
+      // Hosts without a live filter return the whole day, so the in-play rows
+      // are selected here rather than trusting the endpoint.
+      live.push(...mapped.fixtures.filter((fixture) => fixture.status === 'live' || fixture.status === 'halftime'));
+    } catch {
+      /* one sport failing must not stop the others */
+    }
+  }
+
+  const fixtures = dedupe(live);
+  if (fixtures.length) {
+    hydrateRegistry(fixtures);
+    await writeCache(LIVE_KEY, fixtures, 3 * 3600_000, 'api-football');
+
+    // Keep the headline metadata honest about what is in play right now.
+    const meta = await readCache<FeedMeta>(META_KEY, true);
+    if (meta && meta.value) {
+      await writeCache(META_KEY, { ...meta.value, liveCount: fixtures.length }, 6 * 3600_000, 'api-football');
+    }
+  }
+  return fixtures.length;
+}
+
+/** Sports that currently have provider fixtures, with counts. */
+export function sportCounts(fixtures: Fixture[]): Record<SportId, number> {
+  const counts = { football: 0, basketball: 0, tennis: 0, icehockey: 0, baseball: 0 } as Record<SportId, number>;
+  for (const fixture of fixtures) counts[fixture.sport] = (counts[fixture.sport] ?? 0) + 1;
+  return counts;
 }

@@ -7,8 +7,9 @@
     "COLLECT_URL": "https://cavebettor.ewinproject.org/api/providers/refresh"
   },
   "triggers": {
-    // Three refreshes a day keeps the daily API-Football allowance intact
-    // while still giving near-real schedules and live prices.
-    "crons": ["5 4 * * *", "5 12 * * *", "5 18 * * *"]
+    // Every 15 minutes. The app decides what to spend: a paced live sweep when
+    // the daily allowance is ahead of schedule, or a full window refresh when
+    // the fixture snapshot is more than six hours old.
+    "crons": ["*/15 * * * *"]
   }
 }

@@ -1,10 +1,11 @@
 /**
  * CaveBettor provider-collection worker.
  *
- * Runs a few times a day (not on user traffic) and asks the app to refresh
- * the paid provider feeds. The app checks the budget ledger before every
- * outbound call, so the API-Football 100/day ceiling, The Odds API
- * 250/month ceiling and Odd-API 500 credits/month ceiling are respected.
+ * Runs every 15 minutes (not on user traffic) and asks the app to refresh the
+ * paid provider feeds. The app decides per tick whether to spend on a live
+ * sweep or a full window refresh, pacing the API-Football 100/day ceiling
+ * across the whole day. The Odds API 250/month and Odd-API 500 credits/month
+ * ceilings are enforced by the same ledger right before each outbound call.
  *
  * Fixtures are written to the R2 data plane, not to Convex.
  */

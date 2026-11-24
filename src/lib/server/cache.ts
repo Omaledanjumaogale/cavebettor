@@ -72,6 +72,7 @@ export async function readCache<T = unknown>(key: string, allowStale = true): Pr
       if (object) {
         const body = await object.text();
         const parsed = JSON.parse(body) as { value: T; storedAt: number; expiresAt: number };
+        if (!parsed || typeof parsed !== 'object' || !('value' in parsed)) return null;
         const stale = parsed.expiresAt <= Date.now();
         if (!stale || allowStale) {
           return {
@@ -94,8 +95,14 @@ export async function readCache<T = unknown>(key: string, allowStale = true): Pr
   if (!hit) return null;
   const stale = hit.expiresAt <= Date.now();
   if (stale && !allowStale) return null;
+  let value: T;
+  try {
+    value = (JSON.parse(hit.body) as { value: T }).value;
+  } catch {
+    return null;
+  }
   return {
-    value: JSON.parse(hit.body) as T,
+    value,
     storedAt: hit.storedAt,
     expiresAt: hit.expiresAt,
     bytes: hit.bytes,
