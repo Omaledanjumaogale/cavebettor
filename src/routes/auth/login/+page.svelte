@@ -1,9 +1,16 @@
 <script lang="ts">
-  import { ArrowRight, Sparkles, ShieldCheck, CircleAlert, Network } from '@lucide/svelte';
+  import { ArrowRight, Sparkles, ShieldCheck, CircleAlert, Network, Mail, Lock, User, Eye, EyeOff, LoaderCircle } from '@lucide/svelte';
+  import { enhance } from '$app/forms';
   import BrandMark from '#lib/components/BrandMark.svelte';
 
-  let { data } = $props();
+  let { data, form } = $props();
+
+  let showPassword = $state(false);
+  let submitting = $state(false);
+
   const nextQuery = $derived(data.next && data.next !== '/' ? `?next=${encodeURIComponent(data.next)}` : '');
+  const error = $derived(form?.error ?? data.error ?? '');
+  const emailValue = $derived(form?.email ?? data.email ?? '');
 </script>
 
 <svelte:head><title>Sign in — CaveBettor</title></svelte:head>
@@ -16,13 +23,75 @@
       <h1 class="display mt-4 text-[28px] font-bold tracking-tight text-white">Sign in to the desk.</h1>
       <p class="mt-1.5 text-[12px] leading-relaxed text-fog">Fixtures, models, paper ledger and research notes — exactly where you left them. One account also works across the E-WIN ecosystem.</p>
 
-      {#if data.error}
+      {#if error}
         <div role="alert" class="mt-4 flex items-start gap-2 rounded-xl border border-rose/30 bg-rose/10 p-3 text-[11.5px] text-rose">
-          <CircleAlert size={14} class="mt-0.5 shrink-0" /> {data.error}
+          <CircleAlert size={14} class="mt-0.5 shrink-0" /> {error}
         </div>
       {/if}
 
-      <div class="mt-6 space-y-2.5">
+      <!-- Email + password -->
+      <form
+        method="POST"
+        class="mt-5 space-y-2.5"
+        use:enhance={() => {
+          submitting = true;
+          return async ({ update }) => {
+            await update();
+            submitting = false;
+          };
+        }}
+      >
+        <input type="hidden" name="next" value={data.next} />
+
+        <label class="block">
+          <span class="mb-1 block text-[10.5px] font-semibold uppercase tracking-[0.14em] text-fog-dim">Email address</span>
+          <span class="relative block">
+            <Mail size={14} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fog-dim" />
+            <input
+              class="input !py-2.5 pl-9 text-[12.5px]"
+              type="email"
+              name="email"
+              autocomplete="email"
+              required
+              placeholder="you@example.com"
+              value={emailValue}
+            />
+          </span>
+        </label>
+
+        <label class="block">
+          <span class="mb-1 block text-[10.5px] font-semibold uppercase tracking-[0.14em] text-fog-dim">Password</span>
+          <span class="relative block">
+            <Lock size={14} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fog-dim" />
+            <input
+              class="input !py-2.5 pl-9 pr-10 text-[12.5px]"
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              autocomplete="current-password"
+              required
+              placeholder="Your password"
+            />
+            <button
+              type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-fog-dim hover:text-white"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              onclick={() => (showPassword = !showPassword)}
+            >
+              {#if showPassword}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
+            </button>
+          </span>
+        </label>
+
+        <button type="submit" class="btn btn-primary w-full justify-center !py-3 text-[12px] font-semibold" disabled={submitting}>
+          {#if submitting}<LoaderCircle size={14} class="animate-spin" /> Signing in…{:else}Sign in <ArrowRight size={14} />{/if}
+        </button>
+      </form>
+
+      <div class="my-4 flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-fog-dim">
+        <span class="h-px flex-1 bg-white/10"></span> or continue with <span class="h-px flex-1 bg-white/10"></span>
+      </div>
+
+      <div class="space-y-2.5">
         <a href={`/auth/google${nextQuery}`} class="btn w-full justify-center !py-3 text-[12px] font-semibold" class:opacity-50={!data.providers.google} aria-disabled={!data.providers.google}>
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18A11 11 0 0 0 1 12c0 1.77.42 3.45 1.18 4.94l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z"/></svg>
           Continue with Google
@@ -36,7 +105,11 @@
         </a>
       </div>
 
-      <p class="mt-5 text-center text-[10.5px] leading-relaxed text-fog-dim">
+      <p class="mt-5 text-center text-[11px] text-fog">
+        No account yet? <a href="/auth/register" class="font-semibold text-lime hover:underline">Create one with your email</a>
+      </p>
+
+      <p class="mt-4 text-center text-[10.5px] leading-relaxed text-fog-dim">
         By continuing you agree to research-only use. CaveBettor never accepts deposits and never places bets. 18+.
       </p>
 
@@ -54,14 +127,14 @@
       <div class="display text-[30px] font-bold leading-tight text-white">The market moves.<br /><span class="text-gradient">Your process should not.</span></div>
       <p class="mt-4 max-w-md text-[13px] leading-relaxed text-fog">Live fixtures, eight-book pricing, calibrated probabilities and a paper ledger that keeps score — in plain English and Nigerian Naira.</p>
       <div class="mt-8 grid grid-cols-3 gap-3">
-        {#each [['20', 'competitions'], ['5', 'sports'], ['8', 'bookmakers']] as [value, label]}
+        {#each [['20+', 'competitions'], ['5', 'sports'], ['8', 'bookmakers']] as [value, label]}
           <div class="rounded-xl border border-white/[0.08] bg-black/20 p-3">
             <div class="display num text-[22px] font-bold text-lime">{value}</div>
             <div class="text-[10px] uppercase tracking-[0.12em] text-fog-dim">{label}</div>
           </div>
         {/each}
       </div>
-      <div class="mt-8 flex items-center gap-2 text-[11px] text-fog-dim"><ArrowRight size={13} class="text-mint" /> Google, GitHub and E-WIN single sign-on</div>
+      <div class="mt-8 flex items-center gap-2 text-[11px] text-fog-dim"><ArrowRight size={13} class="text-mint" /> Email, Google, GitHub and E-WIN single sign-on</div>
     </div>
   </div>
 </div>
