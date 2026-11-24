@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { internalMutation, internalQuery } from './_generated/server';
 
 /**
  * Email + password credentials (control plane).
@@ -21,7 +21,7 @@ function requireSecret(secret: string) {
   if (diff !== 0) throw new Error('Unauthorized.');
 }
 
-export const get = query({
+export const get = internalQuery({
   args: { email: v.string(), secret: v.string() },
   handler: async (ctx, { email, secret }) => {
     requireSecret(secret);
@@ -45,7 +45,7 @@ export const get = query({
   }
 });
 
-export const write = mutation({
+export const write = internalMutation({
   args: {
     email: v.string(),
     name: v.string(),
@@ -81,7 +81,7 @@ export const write = mutation({
   }
 });
 
-export const noteAttempt = mutation({
+export const noteAttempt = internalMutation({
   args: { email: v.string(), ok: v.boolean(), secret: v.string() },
   handler: async (ctx, { email, ok, secret }) => {
     requireSecret(secret);
@@ -103,7 +103,7 @@ export const noteAttempt = mutation({
   }
 });
 
-export const remove = mutation({
+export const remove = internalMutation({
   args: { email: v.string(), secret: v.string() },
   handler: async (ctx, { email, secret }) => {
     requireSecret(secret);

@@ -4,14 +4,15 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { getFixtures } from '#lib/engine/fixtures';
 import { DATA_SOURCES, MODELS } from '#lib/data/catalog';
 import { convexConfigured, liveSyncStatus, readSnapshot } from '#lib/server/live';
+import { feedMeta, mergedFixtures } from '#lib/server/feed';
 import type { Fixture } from '#lib/types';
 import type { RequestHandler } from './$types';
 
 export const prerender = false;
 
 export const GET: RequestHandler = async () => {
-  const snap = await readSnapshot<Fixture[]>('fixtures');
-  const fixtures = snap ?? getFixtures();
+  const [snap, wire, meta] = await Promise.all([readSnapshot<Fixture[]>('fixtures'), mergedFixtures(), feedMeta()]);
+  const fixtures = wire.providerCount > 0 ? wire.fixtures : (snap ?? getFixtures());
   const sync: any = await liveSyncStatus();
   const llmProvider = privateEnv.AGNES_AI_KEY || process.env.AGNES_AI_KEY
     ? 'agnes'
@@ -24,9 +25,15 @@ export const GET: RequestHandler = async () => {
     version: '1.1.0',
     time: new Date().toISOString(),
     engine: 'CaveBettor Ensemble v7.3',
-    source: snap ? 'convex-live' : 'local-engine',
+    source: wire.providerCount > 0 ? 'api-sports' : snap ? 'convex-live' : 'local-engine',
     fixtures: fixtures.length,
     live: fixtures.filter((f) => f.status === 'live' || f.status === 'halftime').length,
+    providerFixtures: wire.providerCount,
+    competitions: meta?.leagues ?? 0,
+    sports: Object.keys(meta?.sports ?? {}),
+    feed: meta
+      ? { generatedAt: meta.generatedAt, ageMs: meta.ageMs, stale: meta.stale, requests: meta.requests }
+      : null,
     models: MODELS.filter((m) => m.status === 'production').length,
     sources: DATA_SOURCES.length,
     llm: llmProvider,

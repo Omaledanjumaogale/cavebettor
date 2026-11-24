@@ -39,6 +39,12 @@ function requireSecret(secret: string) {
   if (diff !== 0) throw new Error('Unauthorized.');
 }
 
+type RegisterResult = { ok: true; created: boolean } | { ok: false; error: string };
+type VerifyResult =
+  | { ok: true; name: string; role: string; createdAt: number; lastLoginAt: number | null }
+  | { ok: false; reason: 'missing' | 'locked' | 'mismatch'; lockedUntil?: number };
+type RotateResult = { ok: true } | { ok: false; error: string };
+
 /** Create or replace a password credential. */
 export const register = action({
   args: {
@@ -48,9 +54,9 @@ export const register = action({
     role: v.string(),
     secret: v.string()
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RegisterResult> => {
     requireSecret(args.secret);
-    if (args.password.length < 8) return { ok: false as const, error: 'Use at least 8 characters.' };
+    if (args.password.length < 8) return { ok: false, error: 'Use at least 8 characters.' };
 
     const salt = base64url(randomBytes(16));
     const hash = derive(args.password, salt, ITERATIONS);
@@ -64,20 +70,20 @@ export const register = action({
       role: args.role,
       secret: args.secret
     });
-    return { ok: true as const, created: result.created };
+    return { ok: true, created: result.created };
   }
 });
 
 /** Verify a password and record the attempt. */
 export const verify = action({
   args: { email: v.string(), password: v.string(), secret: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<VerifyResult> => {
     requireSecret(args.secret);
     const row = await ctx.runQuery(internal.credentials.get, { email: args.email, secret: args.secret });
-    if (!row) return { ok: false as const, reason: 'missing' as const };
+    if (!row) return { ok: false, reason: 'missing' };
 
     if (row.lockedUntil && row.lockedUntil > Date.now()) {
-      return { ok: false as const, reason: 'locked' as const, lockedUntil: row.lockedUntil };
+      return { ok: false, reason: 'locked', lockedUntil: row.lockedUntil };
     }
 
     const candidate = derive(args.password, row.salt, row.iterations);
@@ -91,9 +97,9 @@ export const verify = action({
       secret: args.secret
     });
 
-    if (!matched) return { ok: false as const, reason: 'mismatch' as const };
+    if (!matched) return { ok: false, reason: 'mismatch' };
     return {
-      ok: true as const,
+      ok: true,
       name: row.name,
       role: row.role,
       createdAt: row.createdAt,
@@ -105,10 +111,10 @@ export const verify = action({
 /** Rotate a password (owner console or self-service reset). */
 export const rotate = action({
   args: { email: v.string(), password: v.string(), secret: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RotateResult> => {
     requireSecret(args.secret);
     const row = await ctx.runQuery(internal.credentials.get, { email: args.email, secret: args.secret });
-    if (!row) return { ok: false as const, error: 'No such account.' };
+    if (!row) return { ok: false, error: 'No such account.' };
 
     const salt = base64url(randomBytes(16));
     const hash = derive(args.password, salt, ITERATIONS);
@@ -121,6 +127,6 @@ export const rotate = action({
       role: row.role,
       secret: args.secret
     });
-    return { ok: true as const };
+    return { ok: true };
   }
 });
