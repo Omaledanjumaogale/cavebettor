@@ -84,7 +84,12 @@ describe('prediction engine', () => {
         expect(outcome.modelProbability).toBeGreaterThan(0);
         expect(outcome.bookOdds).toBeGreaterThan(1);
         expect(outcome.fairOdds).toBeCloseTo(1 / outcome.modelProbability, 0);
-        expect(outcome.edge).toBeCloseTo(outcome.modelProbability * outcome.bookOdds - 1, 2);
+        // Displayed edge is clamped at +35%: anything above that is a state
+        // mismatch rather than a market mistake.
+        expect(outcome.edge).toBeCloseTo(
+          Math.min(0.35, outcome.modelProbability * outcome.bookOdds - 1),
+          2
+        );
         expect(outcome.kelly).toBeGreaterThanOrEqual(0);
       }
     }
@@ -136,7 +141,7 @@ describe('prediction engine', () => {
     const ids = prediction.markets.map((m) => m.id);
     expect(ids).toContain('1x2');
     expect(ids).toContain('btts');
-    expect(ids).toContain('ou25');
+    expect(ids.some((id) => id.startsWith('total'))).toBe(true);
     expect(ids).toContain('cs');
   });
 

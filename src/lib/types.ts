@@ -124,6 +124,8 @@ export type MarketGroup =
   | 'special';
 
 export interface MarketOutcome {
+  /** The competition's own probability for this line, before the model runs. */
+  prior?: number;
   id: string;
   label: string;
   shortLabel?: string;

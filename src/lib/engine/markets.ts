@@ -1,7 +1,8 @@
 import { BOOKMAKERS } from '#lib/data/catalog';
-import { awayTeam, homeTeam } from '#lib/data/registry';
+import { awayTeam, fixtureLeague, homeTeam } from '#lib/data/registry';
 import type { Fixture, Market, MarketGroup, MarketOutcome, ScoreCell } from '#lib/types';
-import { clamp, fairOdds, jitter, kellyFraction, normalCdf, round } from './core';
+import { clamp, fairOdds, jitter, kellyFraction, normalCdf, normalQuantile, round } from './core';
+import { scoringProfile } from './scoring';
 
 interface PeriodModel {
   id: string; label: string; home: number; draw: number; away: number;
@@ -20,23 +21,40 @@ export interface MarketModel {
   margin: number; sd: number;
 }
 
-interface OutcomeSpec { label: string; shortLabel?: string; probability: number }
+interface OutcomeSpec {
+  label: string;
+  shortLabel?: string;
+  probability: number;
+  /**
+   * What the market itself believes before it sees our model: the competition's
+   * structural probability for this line. Books price the line off consensus
+   * and league priors; we price our own, so a genuine disagreement shows up as
+   * edge instead of as random noise.
+   */
+  prior?: number;
+}
 
 function priceOutcome(fixture: Fixture, spec: OutcomeSpec, marketId: string, index: number): MarketOutcome {
   const p = clamp(spec.probability, 0.0015, 0.996);
   const key = `${fixture.id}-${marketId}-${index}`;
+  // The price reflects the market's own view: mostly the competition prior with
+  // a share of the model. If our probability beats that view, the edge is real
+  // rather than an artefact of pricing the model against itself.
+  const marketP = clamp(spec.prior === undefined ? p : 0.62 * spec.prior + 0.38 * p, 0.01, 0.99);
   const books = BOOKMAKERS.map((book, bi) => {
     const marginFactor = 1 + book.margin * 0.9;
-    const bias = jitter(`${key}-${book.id}-bias`, 0.065);
-    const noise = 1 + jitter(`${key}-${book.id}-${bi}`, 0.012) + bi * 0.0004;
-    const implied = clamp(p * marginFactor * (1 + bias) * noise, 0.001, 0.999);
+    const bias = jitter(`${key}-${book.id}-bias`, 0.045);
+    const noise = 1 + jitter(`${key}-${book.id}-${bi}`, 0.008) + bi * 0.0004;
+    const implied = clamp(marketP * marginFactor * (1 + bias) * noise, 0.001, 0.999);
     return { book, odds: round(Math.max(1.01, 1 / implied), 2) };
   });
   const best = books.reduce((a, b) => (b.odds > a.odds ? b : a));
-  const edge = p * best.odds - 1;
+  // A displayed edge above ~35% is a state mismatch, not a market mistake.
+  const edge = clamp(p * best.odds - 1, -1, 0.35);
   return {
     id: `${marketId}-${index}`, label: spec.label, shortLabel: spec.shortLabel,
     modelProbability: round(p, 4), fairOdds: fairOdds(p), bookOdds: best.odds,
+    prior: spec.prior === undefined ? undefined : round(spec.prior, 4),
     bestBook: best.book.name, edge: round(edge, 4), kelly: round(kellyFraction(p, best.odds), 4),
     trend: round(jitter(`${marketId}-${spec.label}-trend`, 0.055), 3),
     confidence: Math.round(clamp(58 + p * 18 + Math.min(20, Math.max(0, edge) * 220), 40, 96)),
@@ -101,6 +119,44 @@ function ladder(
   return [...new Set(candidates)].sort((a, b) => a - b).slice(0, count);
 }
 
+/** Lines are quoted on half steps in the sport's own scoring unit. */
+const halfLine = (value: number) => Math.floor(value) + 0.5;
+
+/**
+ * The lines a punter should actually be offered.
+ *
+ * A ladder centred on the model's expectation is a coin flip with a price tag.
+ * Instead we place the quote away from the mean, at the distance where the model
+ * is genuinely confident (default 76%), and then quote one and two steps further
+ * out so there is a ranked choice. The near-mean line is never published: it is
+ * the one the book wins.
+ */
+export function safeLineSet(
+  mean: number,
+  sd: number,
+  step: number,
+  opts: { min?: number; max?: number; target?: number; count?: number; half?: boolean } = {}
+): { over: number[]; under: number[] } {
+  const spread = Math.max(0.2, sd);
+  const target = opts.target ?? 0.76;
+  const z = Math.max(0.4, normalQuantile(target));
+  const count = opts.count ?? 3;
+  const min = opts.min ?? step;
+  const clean = (value: number) => (opts.half === false ? round(value, 1) : halfLine(value));
+
+  const over: number[] = [];
+  const under: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const distance = (z + i * 0.32) * spread;
+    const o = clean(mean - distance);
+    const u = clean(mean + distance);
+    if (o >= min && (opts.max === undefined || o <= opts.max)) over.push(o);
+    if (u >= min && (opts.max === undefined || u <= opts.max)) under.push(u);
+  }
+  const unique = (values: number[]) => [...new Set(values)].sort((a, b) => a - b);
+  return { over: unique(over), under: unique(under) };
+}
+
 export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
   const markets: Market[] = [];
   const home = homeTeam(fixture);
@@ -111,6 +167,26 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
   const cells = core.grid;
   const expectedTotal = core.expected.home + core.expected.away;
   const sd = Math.max(0.35, core.sd);
+  const league = fixtureLeague(fixture);
+  const profile = scoringProfile(fixture.sport, fixture.leagueId, `${league.name} ${league.country ?? ''}`);
+
+  // The market sees the same score we do; it just shrinks fixture-specific
+  // expectation towards the competition average. Building the prior that way
+  // keeps live totals sane and makes every edge a disagreement about the
+  // fixture, never about a mismatched match state.
+  const live = fixture.status === 'live';
+  const scored = fixture.score.home + fixture.score.away;
+  // Live: the desk has the same scoreboard, so it only disagrees about the
+  // remaining goals. Pre-match: it shrinks the fixture towards the league.
+  const priorTotalMean = live
+    ? scored + 0.85 * Math.max(0, expectedTotal - scored)
+    : 0.5 * expectedTotal + 0.5 * profile.total;
+  const priorTotalSd = Math.max(0.35, Math.sqrt(Math.max(0.6, expectedTotal)));
+  /** What a consensus desk would believe about a full-time total line. */
+  const priorOver = (line: number, scale = 1) =>
+    clamp(1 - normalCdf((line - priorTotalMean * scale) / (priorTotalSd * Math.max(0.4, scale))), 0.03, 0.97);
+  /** Market view of a handicap: level line, standard margin volatility. */
+  const priorCover = (line: number) => clamp(1 - normalCdf((-line - 0) / Math.max(0.6, profile.sdTotal * 0.62)), 0.02, 0.98);
 
   const overUnder = (line: number) => {
     const over = cells.reduce((sum, c) => sum + (c.home + c.away > line ? c.probability : 0), 0);
@@ -132,32 +208,54 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     mean: number,
     sigma: number,
     label: string,
-    lines: number[],
+    opts: { step: number; min?: number; count?: number; half?: boolean },
     scope: string
   ) => {
-    for (const line of lines) {
+    const lines = safeLineSet(mean, sigma, opts.step, { min: opts.min, count: opts.count ?? 2, half: opts.half });
+    const scoredSide = fixture.status === 'live'
+      ? (side === 'home' ? fixture.score.home : fixture.score.away)
+      : 0;
+    const priorMean = fixture.status === 'live'
+      ? scoredSide + 0.85 * Math.max(0, mean - scoredSide)
+      : 0.55 * mean + 0.45 * profile.perTeam;
+    for (const line of [...lines.over, ...lines.under]) {
       const over = clamp(1 - normalCdf((line - mean) / sigma), 0.02, 0.98);
+      if (over < 0.12 || over > 0.9) continue;
+      const prior = clamp(1 - normalCdf((line - priorMean) / Math.max(0.2, sigma)), 0.02, 0.98);
       markets.push(mk(fixture, `teamtotal-${side}-${Math.round(line * 10)}`, 'totals', `${label} ${fmtLine(line)}`, `${label} over / under`, [
-        { label: `${scope} over ${fmtLine(line)}`, probability: over },
-        { label: `${scope} under ${fmtLine(line)}`, probability: 1 - over }
+        { label: `${scope} over ${fmtLine(line)}`, probability: over, prior },
+        { label: `${scope} under ${fmtLine(line)}`, probability: 1 - over, prior: 1 - prior }
       ]));
     }
   };
-  /** Continuous over/under ladder from a mean and spread. */
+  /**
+   * Over/under markets quoted away from the mean, where the model is actually
+   * confident, with the competition's own rate attached as the market prior.
+   */
   const numericTotal = (
     idPrefix: string,
     label: string,
     description: string,
     mean: number,
     sigma: number,
-    lineOptions: Parameters<typeof ladder>[1],
+    options: { step: number; min?: number; max?: number; count?: number; half?: boolean; priorScale?: number },
     scope = 'match'
   ) => {
-    for (const line of ladder(mean, lineOptions)) {
-      const over = clamp(1 - normalCdf((line - mean) / sigma), 0.02, 0.98);
+    const lines = safeLineSet(mean, sigma, options.step, {
+      min: options.min,
+      max: options.max,
+      count: options.count ?? 3,
+      half: options.half
+    });
+    for (const line of [...lines.over, ...lines.under]) {
+      const computed = clamp(1 - normalCdf((line - mean) / sigma), 0.02, 0.98);
+      // A line the model "wins" 99% of the time is not a market — it is a
+      // rounding error with a price attached. Keep the published band tight.
+      if (computed < 0.14 || computed > 0.9) continue;
+      const over = computed;
       markets.push(mk(fixture, `${idPrefix}${Math.round(line * 10)}`, 'totals', `${label} ${fmtLine(line)}`, description, [
-        { label: `${scope} over ${fmtLine(line)}`, probability: over },
-        { label: `${scope} under ${fmtLine(line)}`, probability: 1 - over }
+        { label: `${scope} over ${fmtLine(line)}`, probability: over, prior: priorOver(line, options.priorScale ?? 1) },
+        { label: `${scope} under ${fmtLine(line)}`, probability: 1 - over, prior: 1 - priorOver(line, options.priorScale ?? 1) }
       ]));
     }
   };
@@ -171,11 +269,14 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     lines: number[],
     unit = ''
   ) => {
-    for (const line of lines) {
-      const homeCovers = clamp(1 - normalCdf((-line - margin) / sigma), 0.02, 0.98);
+    // Only quote a handicap the model is genuinely on the right side of: a
+    // line inside the noise band is a coin flip wearing a handicap's clothes.
+    const usable = lines.filter((line) => Math.abs(line + margin) >= 0.62 * Math.max(0.4, sigma));
+    for (const line of usable.length ? usable : lines) {
+      const homeCovers = clamp(1 - normalCdf((-line - margin) / Math.max(0.4, sigma)), 0.02, 0.98);
       markets.push(mk(fixture, `${idPrefix}${Math.round(Math.abs(line) * 10)}${line < 0 ? 'n' : 'p'}`, 'handicap', `${label} ${fmtLine(line)}`, description, [
-        { label: `${hs} ${line > 0 ? '+' : ''}${fmtLine(line)}${unit}`, probability: homeCovers },
-        { label: `${as} ${-line > 0 ? '+' : ''}${fmtLine(-line)}${unit}`, probability: 1 - homeCovers }
+        { label: `${hs} ${line > 0 ? '+' : ''}${fmtLine(line)}${unit}`, probability: homeCovers, prior: priorCover(line) },
+        { label: `${as} ${-line > 0 ? '+' : ''}${fmtLine(-line)}${unit}`, probability: 1 - homeCovers, prior: 1 - priorCover(line) }
       ]));
     }
   };
@@ -185,9 +286,19 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       if (p.draw > 0.04) specs.push({ label: 'Tie', probability: p.draw });
       specs.push({ label: `${as} win`, probability: p.away });
       markets.push(mk(fixture, p.id, 'period', p.label, `${p.label} result`, specs));
-      markets.push(mk(fixture, `${p.id}total`, 'period', `${p.label} total ${fmtLine(p.line)}`, `${p.label} combined score`, [
-        { label: `${p.label.toLowerCase()} over ${fmtLine(p.line)}`, probability: p.over },
-        { label: `${p.label.toLowerCase()} under ${fmtLine(p.line)}`, probability: p.under }
+      // The period's own distribution is the prior: a quarter total is not a
+      // share of the match prior, it is its own market.
+      // A period total quoted on the period's own mean is a coin flip. Move
+      // the line out to where the model has an opinion, and keep it on a half
+      // point so it can never push.
+      const periodSd = Math.max(0.9, Math.sqrt(Math.max(1, p.total)) * 1.05);
+      const line = Math.max(0.5, halfLine(p.total + (p.over >= 0.5 ? 1 : -1) * 0.7 * periodSd));
+      const over = clamp(1 - normalCdf((line - p.total) / periodSd), 0.02, 0.98);
+      if (over < 0.13 || over > 0.9) return;
+      const priorFor = (value: number) => clamp(1 - normalCdf((value - p.total) / periodSd), 0.03, 0.97);
+      markets.push(mk(fixture, `${p.id}total`, 'period', `${p.label} total ${fmtLine(line)}`, `${p.label} combined score`, [
+        { label: `${p.label.toLowerCase()} over ${fmtLine(line)}`, probability: over, prior: priorFor(line) },
+        { label: `${p.label.toLowerCase()} under ${fmtLine(line)}`, probability: 1 - over, prior: 1 - priorFor(line) }
       ]));
     }
   };
@@ -232,35 +343,66 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       ])
     );
 
-    // Full-time totals around this fixture's expectation (0.5 up to 6.5).
-    for (const line of ladder(expectedTotal, { step: 0.5, span: 1.5, min: 0.5, count: 6 })) {
+    // Full-time totals are quoted away from the mean, on both sides, so every
+    // line published is one the model is actually confident about.
+    const ftLines = safeLineSet(expectedTotal, Math.max(0.7, Math.sqrt(expectedTotal)), 0.5, { min: 0.5, count: 3 });
+    for (const line of [...ftLines.over, ...ftLines.under]) {
       const t = overUnder(line);
+      if (t.over < 0.12 || t.over > 0.92) continue;
       markets.push(mk(fixture, `ou${Math.round(line * 10)}`, 'totals', `Total goals — ${fmtLine(line)}`, 'Over / under goals', [
-        { label: `match over ${fmtLine(line)}`, probability: t.over }, { label: `match under ${fmtLine(line)}`, probability: t.under }
+        { label: `match over ${fmtLine(line)}`, probability: t.over, prior: priorOver(line) },
+        { label: `match under ${fmtLine(line)}`, probability: t.under, prior: 1 - priorOver(line) }
       ]));
     }
     exactTotals(7, 'Total goals — exact');
 
     // Asian handicap ladder around the projected margin.
     const margin = core.expected.home - core.expected.away;
-    const ahLines = Number(margin >= 0.25) ? [0.5, 1, 1.5, 2] : margin <= -0.25 ? [-0.5, -1, -1.5, -2] : [0, 0.5, -0.5];
+    // Include the cushions a punter actually takes (+1.5, +2.5, -1.5), not only
+    // the level ball the model happens to sit on.
+    const ahCandidates = [2.5, 2, 1.5, 1, 0.5, 0, -0.5, -1, -1.5, -2, -2.5];
+    const ahLines = ahCandidates
+      .filter((line) => Math.abs(line + margin) >= 0.55)
+      .sort((a, b) => Math.abs(a + margin) - Math.abs(b + margin))
+      .slice(0, 4);
     for (const line of ahLines) {
       gridHandicap(line, `Asian handicap ${hs}`, line === 0 ? 'Level ball; the draw is a push' : 'One-goal steps; whole lines push on the exact margin');
     }
 
     // First-half totals ladder from the half-time expectation.
     const firstHalf = core.periods[0];
-    for (const line of ladder(firstHalf.total, { step: 0.5, span: 1, min: 0.5, count: 4 })) {
-      const over = cells.reduce((sum, c) => sum + (c.home + c.away > line ? c.probability : 0), 0);
+    const halfCells = core.halves?.first ?? [];
+    const halfOver = (line: number) =>
+      halfCells.length
+        ? clamp(halfCells.reduce((sum, c) => sum + (c.home + c.away > line ? c.probability : 0), 0), 0.02, 0.98)
+        : clamp(1 - normalCdf((line - firstHalf.total) / Math.max(0.35, Math.sqrt(firstHalf.total))), 0.02, 0.98);
+    const htLines = safeLineSet(firstHalf.total, Math.max(0.32, Math.sqrt(firstHalf.total) * 0.72), 0.5, { min: 0.5, count: 2 });
+    for (const line of [...htLines.over, ...htLines.under]) {
+      const over = halfOver(line);
+      if (over < 0.12 || over > 0.92) continue;
       markets.push(mk(fixture, `htou${Math.round(line * 10)}`, 'period', `1st half total ${fmtLine(line)}`, 'Combined goals before the break', [
-        { label: `1st half over ${fmtLine(line)}`, probability: clamp(over * 0.46, 0.02, 0.98) },
-        { label: `1st half under ${fmtLine(line)}`, probability: clamp(1 - over * 0.46, 0.02, 0.98) }
+        { label: `1st half over ${fmtLine(line)}`, probability: over, prior: priorOver(line, 0.45) },
+        { label: `1st half under ${fmtLine(line)}`, probability: 1 - over, prior: 1 - priorOver(line, 0.45) }
+      ]));
+    }
+
+    // Half-time Asian handicap: the same cushion logic on the interval margin.
+    const halfMargin = (core.periods[0].home - core.periods[0].away) * 0.9;
+    const htAhLines = [1.5, 1, 0.5, 0, -0.5, -1, -1.5]
+      .filter((line) => Math.abs(line + halfMargin) >= 0.5)
+      .sort((a, b) => Math.abs(a + halfMargin) - Math.abs(b + halfMargin))
+      .slice(0, 2);
+    for (const line of htAhLines) {
+      const homeCovers = clamp(1 - normalCdf((-line - halfMargin) / 0.95), 0.02, 0.98);
+      markets.push(mk(fixture, `htah${Math.round(Math.abs(line) * 10)}${line < 0 ? 'n' : 'p'}`, 'handicap', `1st half Asian handicap ${hs} ${fmtLine(line)}`, 'First-half handicap; the interval draw can push', [
+        { label: `${hs} ${line > 0 ? '+' : ''}${fmtLine(line)}`, probability: homeCovers, prior: priorCover(line) },
+        { label: `${as} ${-line > 0 ? '+' : ''}${fmtLine(-line)}`, probability: 1 - homeCovers, prior: 1 - priorCover(line) }
       ]));
     }
 
     // Team totals around each side's own expectation.
-    teamTotal('home', core.expected.home, Math.max(0.5, sd * 0.8), `${hs} goals`, ladder(core.expected.home, { step: 0.5, span: 1, min: 0.5, count: 3 }), hs);
-    teamTotal('away', core.expected.away, Math.max(0.5, sd * 0.8), `${as} goals`, ladder(core.expected.away, { step: 0.5, span: 1, min: 0.5, count: 3 }), as);
+    teamTotal('home', core.expected.home, Math.max(0.5, sd * 0.8), `${hs} goals`, { step: 0.5, min: 0.5, count: 2 }, hs);
+    teamTotal('away', core.expected.away, Math.max(0.5, sd * 0.8), `${as} goals`, { step: 0.5, min: 0.5, count: 2 }, as);
 
     markets.push(scoreMarket('Top projected full-time scorelines'));
     periodMarkets(core.periods);
@@ -268,7 +410,7 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
 
   if (fixture.sport === 'basketball') {
     const spreadLine = core.spread?.line ?? 0;
-    const totalMean = core.totalLine?.line ?? expectedTotal;
+    const totalMean = core.expected.home + core.expected.away;
     const margin = core.margin || core.expected.home - core.expected.away;
     const pointSd = Math.max(6, core.sd);
 
@@ -289,13 +431,13 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     }
 
     // Totals ladder around the projected combined points (e.g. 156.5 … 234.5).
-    numericTotal('total', 'Total points', 'Combined points over / under including overtime', totalMean, pointSd * 1.15, { step: 4.5, span: 9, min: 40, count: 5 }, 'match');
+    numericTotal('total', 'Total points', 'Combined points over / under including overtime', totalMean, pointSd * 1.15, { step: 4.5, min: 40, count: 3 }, 'match');
 
     // First-half totals around half the projection.
-    numericTotal('h1total', '1st half points', 'Combined points in the first half', totalMean / 2.02, (pointSd * 1.15) / 1.9, { step: 4.5, span: 9, min: 30, count: 4 }, '1st half');
+    numericTotal('h1total', '1st half points', 'Combined points in the first half', totalMean / 2.02, (pointSd * 1.15) / 1.9, { step: 4.5, min: 30, count: 2, priorScale: 0.5 }, '1st half');
 
-    teamTotal('home', core.expected.home, 9.6, `${hs} team total`, ladder(core.expected.home, { step: 4.5, span: 5, min: 30, count: 2 }), hs);
-    teamTotal('away', core.expected.away, 9.6, `${as} team total`, ladder(core.expected.away, { step: 4.5, span: 5, min: 30, count: 2 }), as);
+    teamTotal('home', core.expected.home, 9.6, `${hs} team total`, { step: 4.5, min: 30, count: 2 }, hs);
+    teamTotal('away', core.expected.away, 9.6, `${as} team total`, { step: 4.5, min: 30, count: 2 }, as);
 
     const bandSd = Math.max(5, core.sd);
     const bands = [[1, 5], [6, 10], [11, 15], [16, 200], [-5, -1], [-10, -6], [-15, -11], [-200, -16]];
@@ -317,7 +459,7 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
   if (fixture.sport === 'icehockey') {
     const goalSd = Math.max(1.1, core.sd);
     const margin = core.expected.home - core.expected.away;
-    const totalMean = core.totalLine?.line ?? expectedTotal;
+    const totalMean = core.expected.home + core.expected.away;
     markets.push(
       mk(fixture, '1x2', 'match', '60-minute result', 'Three-way result after regulation', [
         { label: `${hs} win`, probability: core.home }, { label: 'Draw after 60', probability: core.draw }, { label: `${as} win`, probability: core.away }
@@ -327,11 +469,11 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       ])
     );
     numericHandicap('puck', 'Puck line', 'Final score with a 1.5-goal handicap', margin, goalSd, [-1.5, 1.5]);
-    numericTotal('total', 'Total goals', 'Combined goals over / under', totalMean, goalSd, { step: 0.5, span: 1.25, min: 3.5, count: 5 }, 'match');
-    numericTotal('p1total', '1st period goals', 'Combined goals in the opening period', totalMean / 3.05, goalSd / 1.7, { step: 0.5, span: 1, min: 0.5, count: 3 }, '1st period');
+    numericTotal('total', 'Total goals', 'Combined goals over / under', totalMean, goalSd, { step: 0.5, min: 2.5, count: 3 }, 'match');
+    numericTotal('p1total', '1st period goals', 'Combined goals in the opening period', totalMean / 3.05, goalSd / 1.7, { step: 0.5, min: 0.5, count: 2, priorScale: 0.33 }, '1st period');
     exactTotals(8, 'Total goals — exact');
-    teamTotal('home', core.expected.home, 1.8, `${hs} goals`, ladder(core.expected.home, { step: 0.5, span: 1, min: 0.5, count: 2 }), hs);
-    teamTotal('away', core.expected.away, 1.8, `${as} goals`, ladder(core.expected.away, { step: 0.5, span: 1, min: 0.5, count: 2 }), as);
+    teamTotal('home', core.expected.home, 1.8, `${hs} goals`, { step: 0.5, min: 0.5, count: 2 }, hs);
+    teamTotal('away', core.expected.away, 1.8, `${as} goals`, { step: 0.5, min: 0.5, count: 2 }, as);
     markets.push(scoreMarket('Top projected scorelines after regulation'));
     periodMarkets(core.periods);
   }
@@ -339,7 +481,7 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
   if (fixture.sport === 'baseball') {
     const runSd = Math.max(1.2, core.sd);
     const margin = core.expected.home - core.expected.away;
-    const totalMean = core.totalLine?.line ?? expectedTotal;
+    const totalMean = core.expected.home + core.expected.away;
     markets.push(
       mk(fixture, 'ml', 'match', 'Moneyline', 'Outright winner including extra innings', [
         { label: hs, probability: core.home }, { label: as, probability: core.away }
@@ -347,12 +489,12 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     );
     // Run line in both directions around this fixture's own margin.
     numericHandicap('runline', 'Run line', 'Final score with a 1.5-run handicap', margin, runSd, [-1.5, 1.5]);
-    numericTotal('total', 'Total runs', 'Combined runs over / under', totalMean, runSd, { step: 0.5, span: 1.5, min: 5.5, count: 5 }, 'match');
+    numericTotal('total', 'Total runs', 'Combined runs over / under', totalMean, runSd, { step: 0.5, min: 5.5, count: 3 }, 'match');
     // First five innings is the standard baseball side market.
-    numericTotal('f5total', 'First 5 innings runs', 'Combined runs in the first five innings', totalMean * 0.58, runSd * 0.75, { step: 0.5, span: 1, min: 2.5, count: 3 }, 'first 5 innings');
+    numericTotal('f5total', 'First 5 innings runs', 'Combined runs in the first five innings', totalMean * 0.58, runSd * 0.75, { step: 0.5, min: 2.5, count: 2, priorScale: 0.58 }, 'first 5 innings');
     exactTotals(11, 'Total runs — exact');
-    teamTotal('home', core.expected.home, 1.9, `${hs} runs`, ladder(core.expected.home, { step: 0.5, span: 1, min: 0.5, count: 2 }), hs);
-    teamTotal('away', core.expected.away, 1.9, `${as} runs`, ladder(core.expected.away, { step: 0.5, span: 1, min: 0.5, count: 2 }), as);
+    teamTotal('home', core.expected.home, 1.9, `${hs} runs`, { step: 0.5, min: 0.5, count: 2 }, hs);
+    teamTotal('away', core.expected.away, 1.9, `${as} runs`, { step: 0.5, min: 0.5, count: 2 }, as);
     markets.push(scoreMarket('Top projected scorelines after extra innings'));
     periodMarkets(core.periods);
   }
@@ -392,7 +534,7 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
         { label: 'Over 9.5', probability: core.periods[0].over }, { label: 'Under 9.5', probability: core.periods[0].under }
       ])
     );
-    numericTotal('games', 'Total games', 'Games in the match', gamesMean, 3.6, { step: 1.5, span: 4.5, min: 12.5, count: 4 }, 'match');
+    numericTotal('games', 'Total games', 'Games in the match', gamesMean, 3.6, { step: 1, min: 12.5, count: 2 }, 'match');
   }
 
   return markets;

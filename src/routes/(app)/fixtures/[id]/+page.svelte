@@ -47,6 +47,16 @@
   const marketGroups = $derived(Array.from(new Set(prediction.markets.map((m: any) => m.group))));
   const shownMarkets = $derived(marketFilter === 'all' ? prediction.markets : prediction.markets.filter((m: any) => m.group === marketFilter));
 
+  /** The side of a market the consensus desk rates highest, when we have one. */
+  function consensus(market: any) {
+    let best: any = null;
+    for (const outcome of market.outcomes) {
+      if (typeof outcome.prior !== 'number') continue;
+      if (!best || outcome.prior > best.prior) best = outcome;
+    }
+    return best;
+  }
+
   const sportsbookProb = $derived(main ? main.outcomes.map((o: any) => ({ label: o.label, prob: o.modelProbability, odds: o.bookOdds, edge: o.edge })) : []);
 
   async function loadAnalysis() {
@@ -453,7 +463,10 @@
             <button onclick={() => (marketFilter = group)} class={`chip shrink-0 capitalize ${marketFilter === group ? '!border-lime/35 !bg-lime/10 !text-lime' : ''}`}>{group}</button>
           {/each}
         </div>
-        <span class="text-[10px] text-fog-dim">{data.bookmakers.length} bookmakers compared · best price highlighted</span>
+        <span class="text-[10px] text-fog-dim">
+          {data.bookmakers.length} bookmakers compared · totals and handicaps set from this fixture's own projection
+          ({prediction.expectedGoals.home.toFixed(1)}–{prediction.expectedGoals.away.toFixed(1)}, {prediction.expectedGoals.total.toFixed(1)} {prediction.scoreUnit})
+        </span>
       </div>
 
       <div class="grid gap-3 md:grid-cols-2">
@@ -498,7 +511,14 @@
                   />
                 </div>
               {/each}
-              <div class="px-1.5 pb-1 pt-1 text-[8.5px] text-fog-dim">Best price via {market.outcomes[0]?.bestBook} · updated {relativeTime(market.updatedAt)}</div>
+              <div class="px-1.5 pb-1 pt-1 text-[8.5px] leading-snug text-fog-dim">
+                {#if consensus(market)}
+                  {@const c = consensus(market)}
+                  Consensus {c.label} {(c.prior * 100).toFixed(0)}% · model {(c.modelProbability * 100).toFixed(0)}%
+                {:else}
+                  Best price via {market.outcomes[0]?.bestBook} · updated {relativeTime(market.updatedAt)}
+                {/if}
+              </div>
             </div>
           </div>
         {/each}

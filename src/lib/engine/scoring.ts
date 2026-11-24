@@ -175,7 +175,11 @@ const baseball = build(
 
 const tennis = build(
   'tennis',
-  [{ key: 'tennis', label: 'Tennis', total: 23.5, sdTotal: 4.6, sdMargin: 3.4, match: /.*/ }],
+  [
+    // Best-of-five majors run far longer than a best-of-three tour match.
+    { key: 'slam', label: 'Grand Slam (best of five)', total: 34.5, sdTotal: 7.4, sdMargin: 4.6, match: /grand\s*slam|wimbledon|roland|us open|australian open|major/i },
+    { key: 'tennis', label: 'Tennis', total: 23.5, sdTotal: 4.6, sdMargin: 3.4, match: /.*/ }
+  ],
   { key: 'tennis', label: 'Tennis', total: 23.5, sdTotal: 4.6, match: /.*/ }
 );
 

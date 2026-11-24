@@ -198,7 +198,9 @@ function footballCore(fixture: Fixture): CoreModel {
 
   // Live adjustment: only goals still to be scored follow the Poisson process.
   const live = fixture.status === 'live' || fixture.status === 'halftime';
-  const progress = live ? clamp((fixture.minute ?? 45) / 95, 0, 1) : 0;
+  const progress = live
+    ? fixture.status === 'halftime' ? 0.47 : clamp((fixture.minute ?? 45) / 95, 0, 1)
+    : 0;
   const remaining = live ? clamp(1 - progress * 1.06, 0.04, 1) : 1;
   const lambdaH = clamp(expected.home * remaining, 0.05, 4.4);
   const lambdaA = clamp(expected.away * remaining, 0.05, 4.2);
@@ -215,11 +217,16 @@ function footballCore(fixture: Fixture): CoreModel {
   const calibrated = calibrateThreeWay(raw, profile, strength);
   const summary = { ...raw, ...calibrated };
   if (live) {
-    // Re-anchor expectations for display at full-match level.
-    const total = (fixture.score.home + fixture.score.away) / Math.max(0.08, progress);
+    // Re-anchor at full-match level: what is already on the board plus what is
+    // still expected. Dividing the score by elapsed time produced 8-goal
+    // projections after an early goal.
+    const scoredHome = fixture.score.home;
+    const scoredAway = fixture.score.away;
+    const finalHome = scoredHome + lambdaH;
+    const finalAway = scoredAway + lambdaA;
     return {
       ...summary,
-      expected: { home: expected.home, away: expected.away, total },
+      expected: { home: finalHome, away: finalAway, total: finalHome + finalAway },
       grid: summary.grid,
       moneyline: {
         home: clamp(summary.home + summary.draw * 0.58, 0.01, 0.97),
@@ -263,9 +270,10 @@ function hockeyCore(fixture: Fixture): CoreModel {
   );
   const homeMl = clamp(summary.home + summary.draw * 0.54, 0.02, 0.9);
   const awayMl = clamp(summary.away + summary.draw * 0.46, 0.02, 0.9);
-  const total = live
-    ? fixture.score.home + fixture.score.away + lambdaH + lambdaA
-    : expected.home + expected.away;
+  const expectedFinal = live
+    ? { home: fixture.score.home + lambdaH, away: fixture.score.away + lambdaA, total: fixture.score.home + lambdaH + fixture.score.away + lambdaA }
+    : { home: expected.home, away: expected.away, total: expected.home + expected.away };
+  const total = expectedFinal.total;
   const margin = live
     ? fixture.score.home - fixture.score.away + lambdaH - lambdaA
     : expected.home - expected.away;
@@ -274,7 +282,7 @@ function hockeyCore(fixture: Fixture): CoreModel {
     home: summary.home,
     away: summary.away,
     draw: summary.draw,
-    expected: { ...expected, total },
+    expected: expectedFinal,
     moneyline: { home: homeMl, away: awayMl },
     spread: (() => {
       const cover = clamp(1 - normalCdf((1.5 - margin) / 2.3), 0.02, 0.98);
@@ -389,7 +397,10 @@ function baseballCore(fixture: Fixture): CoreModel {
   homeWin = clamp(homeWin + (1 - homeWin) * 0.52, 0.03, 0.97);
   homeWin = 0.5 + (homeWin - 0.5) * 0.86;
   const summary = summarizeGrid(normalized, live ? fixture.score.home : 0, live ? fixture.score.away : 0);
-  const total = live ? fixture.score.home + fixture.score.away + lambdaH + lambdaA : expected.home + expected.away;
+  const expectedFinal = live
+    ? { home: fixture.score.home + lambdaH, away: fixture.score.away + lambdaA, total: fixture.score.home + lambdaH + fixture.score.away + lambdaA }
+    : { home: expected.home, away: expected.away, total: expected.home + expected.away };
+  const total = expectedFinal.total;
   const margin = live ? fixture.score.home - fixture.score.away + lambdaH - lambdaA : expected.home - expected.away;
   const periods = [periodFromGrid('f5', 'First 5 innings', poissonGrid(clamp(lambdaH * 5 / 9, 0.05, 5), clamp(lambdaA * 5 / 9, 0.05, 5), 0), 4.5)];
   const cover = clamp(1 - normalCdf((1.5 - margin) / sd), 0.02, 0.98);
@@ -399,7 +410,7 @@ function baseballCore(fixture: Fixture): CoreModel {
     home: homeWin,
     draw: 0,
     away: 1 - homeWin,
-    expected: { ...expected, total },
+    expected: expectedFinal,
     periods,
     grid: cellsFromGrid(normalized).filter((c) => c.home < 13 && c.away < 13),
     topScorelines: summary.topScorelines.filter((c) => c.home < 13 && c.away < 13).slice(0, 8),
@@ -846,19 +857,28 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
   const seenRow = new Set(valueRows.map((row) => `${row.marketId}|${row.selection}`));
   const safetyRows = all.filter(
     (row) =>
-      row.modelProbability >= 0.55 &&
-      row.edge >= -0.01 &&
-      row.odds >= 1.05 &&
+      row.modelProbability >= 0.66 &&
+      row.edge >= 0.005 &&
+      row.odds >= 1.1 &&
       !seenRow.has(`${row.marketId}|${row.selection}`)
   );
   const eligible = [...valueRows, ...safetyRows];
   if (!eligible.length) return [];
+
+  // Totals picks must be informative: a 97% line is a rounding error and a
+  // 52% line is a coin flip. Both are filtered out before ranking.
+  const informative = (row: Candidate) => {
+    const totals = readTotals(row);
+    if (!totals) return true;
+    return row.modelProbability >= 0.66 && row.modelProbability <= 0.92;
+  };
 
   // ── totals: best line per scope and direction, then compatibility ────────
   const totalsByKey = new Map<string, Candidate>();
   const others: Candidate[] = [];
 
   for (const row of eligible) {
+    if (!informative(row)) continue;
     const totals = readTotals(row);
     if (!totals) {
       others.push(row);
@@ -909,6 +929,15 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
 
   for (const row of others) {
     if (keep.includes(row) || row === straight) continue;
+    // A team-total is correlated with the match total and with the other
+    // team's total; publish at most one.
+    if (/^teamtotal/.test(row.marketId)) {
+      const family = `team-total|${periodKey(row.marketId)}`;
+      if (usedFamilies.has(family)) continue;
+      usedFamilies.add(family);
+      keep.push(row);
+      continue;
+    }
     // Exact scores and set scores are lottery tickets, not recommendations.
     if (row.marketId === 'cs' || row.marketId === 'totalexact' || row.marketId === 'sets' || row.marketId === 'margin' || row.marketId === 'totalband') continue;
     if (/^(ah|spread|puck|runline|sethcp)/.test(row.marketId)) continue;
@@ -939,7 +968,9 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
       return true;
     });
 
-  return balanced.slice(0, 10);
+  // Nothing below a 64% strike rate is published as a pick: the board exists
+  // to project winners, not to fill space.
+  return balanced.filter((row) => row.modelProbability >= 0.64).slice(0, 10);
 }
 
 function buildRecommendations(valueBets: ValueBet[], markets: Market[], fixture: Fixture): Recommendation[] {
@@ -1154,6 +1185,11 @@ export function getPrediction(fixture: Fixture): Prediction {
   const hit = predictionCache.get(key);
   if (hit) return hit;
   const prediction = buildPrediction(fixture);
+  // Keep the projected scoreline internally consistent: the total must always
+  // equal home + away after display rounding.
+  const home = round(prediction.expectedGoals.home, 2);
+  const away = round(prediction.expectedGoals.away, 2);
+  prediction.expectedGoals = { home, away, total: round(home + away, 2) };
   if (predictionCache.size > 240) predictionCache.clear();
   predictionCache.set(key, prediction);
   return prediction;
