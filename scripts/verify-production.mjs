@@ -65,12 +65,16 @@ async function main() {
   await check('health endpoint', `${base}/api/health`, { type: 'application/json' });
 
   // ── PWA surface ──────────────────────────────────────────────────────────
-  const manifest = await check('web app manifest', `${base}/manifest.webmanifest`, {
+  await check('web app manifest', `${base}/manifest.webmanifest`, {
     type: 'application/manifest+json',
     contains: '"start_url"'
   });
-  if (manifest?.ok) {
-    const body = await manifest.json().catch(() => null);
+  // The body above is already consumed by the `contains` assertion, so the
+  // manifest is fetched again for the structural checks.
+  const body = await fetch(`${base}/manifest.webmanifest`)
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null);
+  if (body) {
     if (!body?.icons?.some((icon) => icon.sizes === '512x512')) failures.push('manifest has no 512px icon');
     if (!body?.screenshots?.length) failures.push('manifest has no screenshots');
     for (const icon of body?.icons ?? []) {

@@ -13,7 +13,7 @@
  *      URL only ever points at one byte-identical file.
  */
 
-const VERSION = 'cb-v1';
+const VERSION = 'cb-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const ASSET_CACHE = `${VERSION}-assets`;
@@ -96,7 +96,10 @@ function cacheable(response) {
 async function networkFirstNavigation(request, store) {
   const cache = await caches.open(PAGE_CACHE);
   try {
-    const response = await withTimeout(fetch(request), 4500);
+    // `no-cache` forces revalidation, so a navigation never resolves from the
+    // browser's own HTTP cache while offline — that is how a workspace page
+    // used to sneak back in and hide the offline notice.
+    const response = await withTimeout(fetch(request, { cache: 'no-cache' }), 4500);
     if (store && cacheable(response)) cache.put(request, response.clone()).catch(() => {});
     return response;
   } catch {
