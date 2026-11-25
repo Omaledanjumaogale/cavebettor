@@ -389,8 +389,12 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     // Include the cushions a punter actually takes (+1.5, +2.5, -1.5), not only
     // the level ball the model happens to sit on.
     const ahCandidates = [2.5, 2, 1.5, 1, 0.5, 0, -0.5, -1, -1.5, -2, -2.5];
+    // A +0.5 on a near-even fixture is a double chance in disguise: the model
+    // has no opinion on it and the cushion does nothing a real cushion would.
+    // The quoted cushions must be at least a goal away from the level ball,
+    // which is what makes a handicap line different from 1X2.
     const ahLines = ahCandidates
-      .filter((line) => Math.abs(line + margin) >= 0.55)
+      .filter((line) => Math.abs(line + margin) >= (Math.abs(line) === 0.5 ? 0.95 : 0.55))
       .sort((a, b) => Math.abs(a + margin) - Math.abs(b + margin))
       .slice(0, 4);
     for (const line of ahLines) {
@@ -610,15 +614,18 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     );
     // The competition profile and the format can disagree (a best-of-three
     // match in a 'Grand Slam' competition name), so the consensus view is taken
-    // from the format the model actually priced.
+    // from the format the model actually priced. The spread follows the same
+    // shape the model quotes (root-mean scaling, ~4.4 games on a 23-game match)
+    // instead of a flat 3.6 that made an 18.5 over look like gold.
     const formatGames = bestOfFive ? 38.5 : 22.5;
+    const gamesSd = Math.max(3.2, Math.sqrt(Math.max(6, gamesMean)) * 0.92);
     numericTotal(
       'games',
       'Total games',
       'Games in the match',
       gamesMean,
-      3.6,
-      { step: 1, min: 12.5, count: 2, priorMean: 0.5 * gamesMean + 0.5 * formatGames, priorSd: 4 },
+      gamesSd,
+      { step: 1, min: 12.5, count: 2, priorMean: 0.5 * gamesMean + 0.5 * formatGames, priorSd: gamesSd * 1.08 },
       'match'
     );
   }
