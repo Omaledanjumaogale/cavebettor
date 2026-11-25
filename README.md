@@ -94,8 +94,17 @@ gh auth refresh -s workflow   # one-time, browser approval
 npm run ci:install            # copies ops/ci/github-actions.yml into .github/workflows/ and pushes
 ```
 
-Until that scope is granted the same checks run locally with `npm run ci`, and the browser audits
-(`audit:schedule`, `audit:pwa`) run against the deployed URL.
+The workflow validates every push to `main` (assets, PWA contract, types, 83 unit tests, market
+audit, build, static pages) and publishes to Cloudflare when the deploy secrets exist:
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN --body "<token with Workers Scripts: Edit>"
+gh secret set CLOUDFLARE_ACCOUNT_ID --body "04ca38ff81dd0f1c0cdf584db3779aee"
+```
+
+Without them the deploy job reports a notice and stays green, which is the default because this
+project publishes from the workstation with wrangler OAuth. The browser audits (`audit:schedule`,
+`audit:pwa`) run locally against the deployed URL.
 
 ### Progressive web app
 
