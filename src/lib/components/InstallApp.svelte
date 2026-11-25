@@ -52,8 +52,10 @@
     <div class="flex items-center gap-1.5">
       {#if pwa.state === 'available'}
         <button class="btn btn-primary !py-1.5 text-[11px]" onclick={install}><Download size={12} /> Install</button>
-      {:else}
+      {:else if pwa.state === 'ios-manual'}
         <span class="chip chip-lime !text-[9.5px]"><Share2 size={10} /> Share → Add to Home Screen</span>
+      {:else}
+        <span class="chip !text-[9.5px]"><Download size={10} /> Open in Chrome or Edge to install</span>
       {/if}
       <button class="btn-icon !h-7 !w-7" aria-label="Dismiss install prompt" onclick={() => pwa.dismiss()}><X size={13} /></button>
     </div>
