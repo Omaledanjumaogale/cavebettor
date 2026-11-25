@@ -969,8 +969,9 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
     });
 
   // Nothing below a 64% strike rate is published as a pick: the board exists
-  // to project winners, not to fill space.
-  return balanced.filter((row) => row.modelProbability >= 0.64).slice(0, 10);
+  // to project winners, not to fill space. The edge floor is 1% because the
+  // bookmaker jitter is ±4.5% — anything under that is noise, not a signal.
+  return balanced.filter((row) => row.modelProbability >= 0.64 && row.edge >= 0.01).slice(0, 10);
 }
 
 function buildRecommendations(valueBets: ValueBet[], markets: Market[], fixture: Fixture): Recommendation[] {

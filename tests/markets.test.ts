@@ -122,6 +122,23 @@ describe('totals and handicap markets', () => {
     }
   });
 
+  it('keeps every period prior inside the model spread', () => {
+    // A period total whose consensus view is built from a different spread than
+    // the model quotes produces fake edges: the first-five-innings line once
+    // read 83% against a 96% prior purely because the two standard deviations
+    // disagreed. The gap must stay inside the model's own uncertainty.
+    for (const fixture of fixtures) {
+      const card = getPrediction(fixture);
+      for (const market of card.markets) {
+        if (market.kind !== 'totals') continue;
+        for (const outcome of market.outcomes) {
+          if (typeof outcome.prior !== 'number') continue;
+          expect(Math.abs(outcome.modelProbability - outcome.prior)).toBeLessThanOrEqual(0.18);
+        }
+      }
+    }
+  });
+
   it('ranks every board by model probability', () => {
     for (const fixture of fixtures) {
       const card = getPrediction(fixture);

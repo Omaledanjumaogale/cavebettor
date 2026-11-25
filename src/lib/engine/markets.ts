@@ -238,7 +238,17 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     description: string,
     mean: number,
     sigma: number,
-    options: { step: number; min?: number; max?: number; count?: number; half?: boolean; priorScale?: number },
+    options: {
+      step: number;
+      min?: number;
+      max?: number;
+      count?: number;
+      half?: boolean;
+      /** League view of this period's mean, when the period is a slice of the match. */
+      priorMean?: number;
+      /** League view of this period's spread. */
+      priorSd?: number;
+    },
     scope = 'match'
   ) => {
     const lines = safeLineSet(mean, sigma, options.step, {
@@ -247,6 +257,13 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       count: options.count ?? 3,
       half: options.half
     });
+    // A period's consensus view has to move with the same spread the model
+    // quotes. Scaling the full-time prior down by a fixed share made an
+    // sd mismatch look like a 13-point edge on a first-five-innings total.
+    const periodPrior = (line: number) =>
+      options.priorMean === undefined
+        ? priorOver(line)
+        : clamp(1 - normalCdf((line - options.priorMean) / (options.priorSd ?? sigma)), 0.03, 0.97);
     for (const line of [...lines.over, ...lines.under]) {
       const computed = clamp(1 - normalCdf((line - mean) / sigma), 0.02, 0.98);
       // A line the model "wins" 99% of the time is not a market — it is a
@@ -254,8 +271,8 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       if (computed < 0.14 || computed > 0.9) continue;
       const over = computed;
       markets.push(mk(fixture, `${idPrefix}${Math.round(line * 10)}`, 'totals', `${label} ${fmtLine(line)}`, description, [
-        { label: `${scope} over ${fmtLine(line)}`, probability: over, prior: priorOver(line, options.priorScale ?? 1) },
-        { label: `${scope} under ${fmtLine(line)}`, probability: 1 - over, prior: 1 - priorOver(line, options.priorScale ?? 1) }
+        { label: `${scope} over ${fmtLine(line)}`, probability: over, prior: periodPrior(line) },
+        { label: `${scope} under ${fmtLine(line)}`, probability: 1 - over, prior: 1 - periodPrior(line) }
       ]));
     }
   };
@@ -434,7 +451,15 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     numericTotal('total', 'Total points', 'Combined points over / under including overtime', totalMean, pointSd * 1.15, { step: 4.5, min: 40, count: 3 }, 'match');
 
     // First-half totals around half the projection.
-    numericTotal('h1total', '1st half points', 'Combined points in the first half', totalMean / 2.02, (pointSd * 1.15) / 1.9, { step: 4.5, min: 30, count: 2, priorScale: 0.5 }, '1st half');
+    numericTotal(
+      'h1total',
+      '1st half points',
+      'Combined points in the first half',
+      totalMean / 2.02,
+      (pointSd * 1.15) / 1.9,
+      { step: 4.5, min: 30, count: 2, priorMean: 0.5 * (totalMean / 2.02) + 0.5 * (profile.total / 2.02), priorSd: ((pointSd * 1.15) / 1.9) * 1.08 },
+      '1st half'
+    );
 
     teamTotal('home', core.expected.home, 9.6, `${hs} team total`, { step: 4.5, min: 30, count: 2 }, hs);
     teamTotal('away', core.expected.away, 9.6, `${as} team total`, { step: 4.5, min: 30, count: 2 }, as);
@@ -470,7 +495,15 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     );
     numericHandicap('puck', 'Puck line', 'Final score with a 1.5-goal handicap', margin, goalSd, [-1.5, 1.5]);
     numericTotal('total', 'Total goals', 'Combined goals over / under', totalMean, goalSd, { step: 0.5, min: 2.5, count: 3 }, 'match');
-    numericTotal('p1total', '1st period goals', 'Combined goals in the opening period', totalMean / 3.05, goalSd / 1.7, { step: 0.5, min: 0.5, count: 2, priorScale: 0.33 }, '1st period');
+    numericTotal(
+      'p1total',
+      '1st period goals',
+      'Combined goals in the opening period',
+      totalMean / 3.05,
+      goalSd / 1.7,
+      { step: 0.5, min: 0.5, count: 2, priorMean: 0.5 * (totalMean / 3.05) + 0.5 * (profile.total / 3.05), priorSd: (goalSd / 1.7) * 1.1 },
+      '1st period'
+    );
     exactTotals(8, 'Total goals — exact');
     teamTotal('home', core.expected.home, 1.8, `${hs} goals`, { step: 0.5, min: 0.5, count: 2 }, hs);
     teamTotal('away', core.expected.away, 1.8, `${as} goals`, { step: 0.5, min: 0.5, count: 2 }, as);
@@ -479,19 +512,34 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
   }
 
   if (fixture.sport === 'baseball') {
-    const runSd = Math.max(1.2, core.sd);
+    const marginSd = Math.max(1.2, core.sd);
     const margin = core.expected.home - core.expected.away;
     const totalMean = core.expected.home + core.expected.away;
+    // Runs are not as dispersed as the run line implies: a 7.8-run game has a
+    // total sd near 4, not the margin's 6. Using the margin spread as the total
+    // spread quoted 16.5-run lines as if they were live markets.
+    const totalSd = Math.max(1.8, Math.sqrt(Math.max(1, totalMean)) * 1.45);
+    const f5Mean = totalMean * 0.56;
+    const f5Sd = Math.max(1.3, Math.sqrt(Math.max(1, f5Mean)) * 1.15);
     markets.push(
       mk(fixture, 'ml', 'match', 'Moneyline', 'Outright winner including extra innings', [
         { label: hs, probability: core.home }, { label: as, probability: core.away }
       ])
     );
     // Run line in both directions around this fixture's own margin.
-    numericHandicap('runline', 'Run line', 'Final score with a 1.5-run handicap', margin, runSd, [-1.5, 1.5]);
-    numericTotal('total', 'Total runs', 'Combined runs over / under', totalMean, runSd, { step: 0.5, min: 5.5, count: 3 }, 'match');
-    // First five innings is the standard baseball side market.
-    numericTotal('f5total', 'First 5 innings runs', 'Combined runs in the first five innings', totalMean * 0.58, runSd * 0.75, { step: 0.5, min: 2.5, count: 2, priorScale: 0.58 }, 'first 5 innings');
+    numericHandicap('runline', 'Run line', 'Final score with a 1.5-run handicap', margin, marginSd, [-1.5, 1.5]);
+    numericTotal('total', 'Total runs', 'Combined runs over / under', totalMean, totalSd, { step: 0.5, min: 5.5, count: 3 }, 'match');
+    // First five innings is the standard baseball side market, priced on the
+    // first five innings' own mean and spread rather than a slice of full time.
+    numericTotal(
+      'f5total',
+      'First 5 innings runs',
+      'Combined runs in the first five innings',
+      f5Mean,
+      f5Sd,
+      { step: 0.5, min: 2.5, count: 2, priorMean: 0.5 * f5Mean + 0.5 * profile.total * 0.56, priorSd: f5Sd * 1.08 },
+      'first 5 innings'
+    );
     exactTotals(11, 'Total runs — exact');
     teamTotal('home', core.expected.home, 1.9, `${hs} runs`, { step: 0.5, min: 0.5, count: 2 }, hs);
     teamTotal('away', core.expected.away, 1.9, `${as} runs`, { step: 0.5, min: 0.5, count: 2 }, as);
