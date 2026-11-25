@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { Settings, User, CreditCard, KeyRound, Database, Bell, ShieldCheck, Check, Save, ArrowUpRight, Eye, EyeOff, Sparkles, Lock, AlertTriangle, CircleHelp } from '@lucide/svelte';
   import SectionHeader from '#lib/components/SectionHeader.svelte';
+  import InstallApp from '#lib/components/InstallApp.svelte';
   import { DEMO_USER, SUBSCRIPTION_PLANS, DATA_SOURCES } from '#lib/data/catalog';
   import { fmtNgn } from '#lib/engine/core';
   import { formatDate } from '#lib/format';
@@ -223,6 +224,26 @@
           <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
             <p class="max-w-md text-[9px] leading-relaxed text-fog-dim"><Lock size={9} class="mr-1 inline" /> Production keys are stored as Cloudflare/Convex environment secrets. The browser demo vault is for testing only and is never sent to a provider.</p>
             <button onclick={saveKeys} class="btn btn-primary !py-2 text-[11px]"><Save size={12} /> Save demo vault</button>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <InstallApp variant="card" />
+          <div class="panel p-4">
+            <SectionHeader title="E-WIN ecosystem" description="One identity across every E-WIN application" eyebrow="Ecosystem" />
+            <div class="space-y-2 text-[10.5px] text-fog">
+              <div class="flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-black/15 px-3 py-2">
+                <span>Single sign-on</span>
+                <span class={`chip !text-[8.5px] ${data.ecosystem?.sso ? 'chip-mint' : 'chip-amber'}`}>{data.ecosystem?.sso ? 'Connected' : 'Not configured'}</span>
+              </div>
+              <div class="flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-black/15 px-3 py-2">
+                <span>App descriptor</span>
+                <a class="font-mono text-[9.5px] text-lime hover:underline" href="/.well-known/ewin-app.json">/.well-known/ewin-app.json</a>
+              </div>
+              <a class="btn btn-ghost w-full !py-2 text-[11px]" href={data.ecosystem?.hubUrl ?? 'https://ewinproject.org'} target="_blank" rel="noopener">
+                Open the E-WIN Project hub <ArrowUpRight size={12} />
+              </a>
+            </div>
           </div>
         </div>
 

@@ -1,0 +1,87 @@
+{
+  "id": "/?source=pwa",
+  "name": "CaveBettor — Sports Prediction & Odds Intelligence",
+  "short_name": "CaveBettor",
+  "description": "Model-led sports predictions, odds intelligence and bankroll analytics for football, basketball, tennis, ice hockey and baseball. Naira-first, research-only, 18+.",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "start_url": "/dashboard?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "theme_color": "#070d0b",
+  "background_color": "#070d0b",
+  "categories": ["sports", "finance", "productivity"],
+  "prefer_related_applications": false,
+  "launch_handler": { "client_mode": "navigate-existing" },
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/dashboard-wide.png",
+      "sizes": "2560x1440",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Command centre: live counts, value board and bankroll in one screen"
+    },
+    {
+      "src": "/screenshots/value-wide.png",
+      "sizes": "2560x1440",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Value board ranked by model probability"
+    },
+    {
+      "src": "/screenshots/dashboard-narrow.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "The same command centre on a phone"
+    },
+    {
+      "src": "/screenshots/fixtures-narrow.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Fixture board with kick-off windows and model probabilities"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Live now",
+      "short_name": "Live",
+      "description": "Every match in play with progressive scores",
+      "url": "/live?source=shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Value board",
+      "short_name": "Value",
+      "description": "Selections ranked by model probability",
+      "url": "/predictions?source=shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Betslip builder",
+      "short_name": "Betslip",
+      "description": "Build, save and share accumulators",
+      "url": "/betslip?source=shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Fixtures",
+      "short_name": "Fixtures",
+      "description": "Next 1, 3, 6, 12 and 24 hours of kick-offs",
+      "url": "/fixtures?source=shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "related_applications": []
+}

@@ -1,4 +1,6 @@
 import { wireCounts } from '#lib/server/feed';
+import { env as privateEnv } from '$env/dynamic/private';
+import { ECOSYSTEM, hubUrl } from '#lib/ecosystem';
 import { DEMO_USER, SUBSCRIPTION_PLANS } from '#lib/data/catalog';
 
 /** The super admin never pays: full platform and admin console, free forever. */
@@ -37,6 +39,13 @@ export const load: LayoutServerLoad = async ({ locals }) => {
           renewsAt: null,
           isSuperAdmin: locals.user.role === 'super_admin'
         }
-      : DEMO_USER
+      : DEMO_USER,
+    // The shell needs the hub link and the app id; both are public.
+    ecosystem: {
+      appId: ECOSYSTEM.id,
+      hubUrl: hubUrl(privateEnv.EWIN_SITE_URL),
+      sso: Boolean(privateEnv.EWIN_CONVEX_SITE_URL || process.env.EWIN_CONVEX_SITE_URL),
+      descriptor: '/.well-known/ewin-app.json'
+    }
   };
 };

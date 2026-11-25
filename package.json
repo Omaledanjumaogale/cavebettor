@@ -22,7 +22,10 @@
     "production:verify": "node scripts/verify-production.mjs",
     "deploy:cloudflare": "npm run build && wrangler deploy --config wrangler.worker.jsonc",
     "deploy:pages": "npm run build && wrangler pages deploy .svelte-kit/cloudflare --project-name cavebettor --branch main",
-    "ci": "npm run assets:unique && npm run assets:check && npm run check && npm test && npm run build"
+    "ci": "npm run assets:unique && npm run assets:check && npm run pwa:verify && npm run check && npm test && npm run build",
+    "pwa:icons": "node scripts/build-pwa-icons.mjs",
+    "pwa:screenshots": "node scripts/capture-pwa-screenshots.mjs",
+    "pwa:verify": "node scripts/verify-pwa.mjs"
   },
   "devDependencies": {
     "@cloudflare/workerd-windows-64": "^1.20261119.1",

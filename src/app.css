@@ -559,3 +559,50 @@ html[data-theme='light'] aside.fixed { background-color: rgba(255, 255, 255, 0.9
 html[data-theme='light'] .bg-pitch-950\/80,
 html[data-theme='light'] .bg-pitch-950\/95 { background-color: rgba(255, 255, 255, 0.96) !important; }
 html[data-theme='light'] .bg-void\/75 { background-color: rgba(242, 246, 239, 0.88) !important; }
+
+/* ── Progressive web app ──────────────────────────────────────────────────
+   Installed on a phone the app has no browser chrome, so it owes the user the
+   things the browser used to provide: safe-area padding, no rubber-band
+   overscroll on the shell, and a tap highlight that matches the palette. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (display-mode: standalone) {
+  /* The status bar sits over the page on iOS: keep the top chrome clear. */
+  body {
+    overscroll-behavior-y: none;
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
+  }
+  header.sticky {
+    padding-top: var(--safe-top);
+  }
+  /* There is nothing to install once you are inside the installed app. */
+  [data-install-only] {
+    display: none !important;
+  }
+}
+
+html {
+  -webkit-tap-highlight-color: rgba(201, 255, 77, 0.16);
+}
+
+@media (max-width: 1023px) {
+  /* The bottom navigation owns the safe area; pages must not slide under it. */
+  main,
+  .page-shell {
+    padding-bottom: calc(64px + var(--safe-bottom));
+  }
+  footer {
+    padding-bottom: calc(64px + var(--safe-bottom));
+  }
+}

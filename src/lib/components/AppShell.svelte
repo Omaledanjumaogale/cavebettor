@@ -5,13 +5,15 @@
     LayoutDashboard, CalendarDays, Radio, Sparkles, Coins, BrainCircuit, Database,
     ChartNoAxesCombined, WalletCards, NotebookPen, Settings, CreditCard, ShieldCheck,
     Search, Bell, Menu, X, ChevronDown, ArrowUpRight, CircleHelp, LogOut, Plus, Command,
-    Activity, Volleyball, Snowflake, CircleDot, Ticket, Home, ToggleLeft, Globe
+    Activity, Volleyball, Snowflake, CircleDot, Ticket, Home, ToggleLeft, Globe, Download, Network
   } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import BrandMark from './BrandMark.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
   import { betslip } from '#lib/betslip.svelte';
   import CommandPalette from './CommandPalette.svelte';
+  import InstallApp from './InstallApp.svelte';
+  import { pwa } from '#lib/pwa.svelte';
   import { DEMO_USER, SUBSCRIPTION_PLANS } from '#lib/data/catalog';
 
   let {
@@ -19,8 +21,16 @@
     liveCount = 0,
     valueCount = 0,
     fixturesCount = 0,
-    user = null
-  }: { children: Snippet; liveCount?: number; valueCount?: number; fixturesCount?: number; user?: typeof DEMO_USER | null } = $props();
+    user = null,
+    ecosystem = null
+  }: {
+    children: Snippet;
+    liveCount?: number;
+    valueCount?: number;
+    fixturesCount?: number;
+    user?: typeof DEMO_USER | null;
+    ecosystem?: { appId: string; hubUrl: string; sso: boolean; descriptor: string } | null;
+  } = $props();
 
   let searchOpen = $state(false);
   let drawer = $state(false);
@@ -90,8 +100,17 @@
       ]
     },
     {
-      label: 'Elsewhere',
-      items: [{ href: '/', label: 'Landing page', icon: Globe, badge: '' }]
+      label: 'E-WIN ecosystem',
+      items: [
+        { href: '/', label: 'Landing page', icon: Globe, badge: '' },
+        {
+          href: ecosystem?.hubUrl ?? 'https://ewinproject.org',
+          label: 'E-WIN Project hub',
+          icon: Network,
+          badge: '',
+          external: true
+        }
+      ]
     }
   ]);
 
@@ -120,10 +139,17 @@
       ]
     },
     {
-      label: 'Elsewhere',
+      label: 'E-WIN ecosystem',
       items: [
         { href: '/dashboard', label: 'User dashboard', icon: LayoutDashboard, badge: '' },
-        { href: '/', label: 'Landing page', icon: Globe, badge: '' }
+        { href: '/', label: 'Landing page', icon: Globe, badge: '' },
+        {
+          href: ecosystem?.hubUrl ?? 'https://ewinproject.org',
+          label: 'E-WIN Project hub',
+          icon: Network,
+          badge: '',
+          external: true
+        }
       ]
     }
   ]);
@@ -262,6 +288,26 @@
           <ArrowUpRight size={12} class="ml-auto text-fog-dim" />
         </a>
 
+        <!-- PWA: install into the device, and the hub this app belongs to. -->
+        <div class="mx-3 mb-3 space-y-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
+          <div class="px-1.5 pt-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-fog-dim">App</div>
+          <InstallApp variant="button" />
+          <a
+            href={ecosystem?.hubUrl ?? 'https://ewinproject.org'}
+            target="_blank"
+            rel="noopener"
+            onclick={() => (drawer = false)}
+            class="flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-[13px] text-white/70 transition hover:bg-white/5"
+          >
+            <Network size={15} class="text-sky" />
+            <span class="min-w-0 flex-1">
+              E-WIN Project hub
+              <span class="block text-[9.5px] text-fog-dim">{ecosystem?.sso ? 'Single sign-on connected' : 'Open the ecosystem'}</span>
+            </span>
+            <ArrowUpRight size={12} class="text-fog-dim" />
+          </a>
+        </div>
+
         {#if canAdmin}
           <button
             onclick={() => setView(!adminView)}
@@ -296,6 +342,12 @@
 
   <!-- Main -->
   <div class="lg:pl-[248px]">
+    {#if pwa.updateReady}
+      <div class="flex items-center justify-center gap-2 bg-lime/90 px-3 py-1.5 text-[11px] font-semibold text-pitch-950">
+        New version of CaveBettor is ready
+        <button class="rounded-md bg-pitch-950/85 px-2 py-0.5 text-[10px] text-lime" onclick={() => pwa.applyUpdate()}>Reload</button>
+      </div>
+    {/if}
     <header class="sticky top-0 z-30 border-b border-white/[0.07] bg-void/75 backdrop-blur-xl">
       <div class="flex h-14 items-center gap-2.5 px-3.5 sm:h-16 sm:gap-3 sm:px-6">
         <button class="btn-icon lg:hidden" onclick={() => (drawer = true)} aria-label="Open menu"><Menu size={16} /></button>

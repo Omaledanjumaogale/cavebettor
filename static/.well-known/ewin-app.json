@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "appId": "cavebettor",
+  "name": "CaveBettor",
+  "tagline": "Model-led sports prediction, odds intelligence and bankroll analytics",
+  "category": "sports-intelligence",
+  "appVersion": "1.1.0",
+  "url": "https://cavebettor.ewinproject.org",
+  "icon": "https://cavebettor.ewinproject.org/icons/icon-512.png",
+  "manifest": "https://cavebettor.ewinproject.org/manifest.webmanifest",
+  "locale": "en-NG",
+  "currency": "NGN",
+  "ageGate": 18,
+  "capabilities": [
+    "sso",
+    "shared-identity",
+    "shared-session-mirror",
+    "health",
+    "pwa",
+    "deep-links",
+    "market-intelligence",
+    "progressive-scores",
+    "settlement-archive"
+  ],
+  "endpoints": {
+    "health": "https://cavebettor.ewinproject.org/api/health",
+    "manifest": "https://cavebettor.ewinproject.org/api/ecosystem/manifest",
+    "session": "https://cavebettor.ewinproject.org/api/ecosystem/session",
+    "ssoStart": "https://cavebettor.ewinproject.org/auth/ewin",
+    "ssoCallback": "https://cavebettor.ewinproject.org/auth/ewin/callback"
+  },
+  "deepLinks": [
+    { "id": "dashboard", "label": "Command centre", "path": "/dashboard", "url": "https://cavebettor.ewinproject.org/dashboard" },
+    { "id": "live", "label": "Live now", "path": "/live", "url": "https://cavebettor.ewinproject.org/live" },
+    { "id": "fixtures", "label": "Fixtures", "path": "/fixtures", "url": "https://cavebettor.ewinproject.org/fixtures" },
+    { "id": "value", "label": "Value board", "path": "/predictions", "url": "https://cavebettor.ewinproject.org/predictions" },
+    { "id": "betslip", "label": "Betslip builder", "path": "/betslip", "url": "https://cavebettor.ewinproject.org/betslip" },
+    { "id": "pricing", "label": "Plans", "path": "/pricing", "url": "https://cavebettor.ewinproject.org/pricing" }
+  ],
+  "pwa": {
+    "installable": true,
+    "display": "standalone",
+    "startUrl": "https://cavebettor.ewinproject.org/dashboard?source=pwa",
+    "scope": "https://cavebettor.ewinproject.org/",
+    "themeColor": "#070d0b"
+  }
+}

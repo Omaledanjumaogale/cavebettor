@@ -5,6 +5,7 @@ import { getFixtures } from '#lib/engine/fixtures';
 import { DATA_SOURCES, MODELS } from '#lib/data/catalog';
 import { convexConfigured, liveSyncStatus, readSnapshot } from '#lib/server/live';
 import { feedMeta, mergedFixtures } from '#lib/server/feed';
+import { ECOSYSTEM, appUrl, ecosystemDescriptor, hubUrl } from '#lib/ecosystem';
 import type { Fixture } from '#lib/types';
 import type { RequestHandler } from './$types';
 
@@ -49,6 +50,21 @@ export const GET: RequestHandler = async () => {
       admin: Boolean(privateEnv.SUPER_ADMIN_EMAIL || process.env.SUPER_ADMIN_EMAIL)
     },
     site: publicEnv.PUBLIC_SITE_URL || process.env.PUBLIC_SITE_URL || null,
-    currency: 'NGN'
+    currency: 'NGN',
+    pwa: {
+      installable: true,
+      manifest: '/manifest.webmanifest',
+      serviceWorker: '/sw.js',
+      startUrl: '/dashboard?source=pwa',
+      display: 'standalone',
+      offlineFallback: '/offline'
+    },
+    ecosystem: {
+      appId: ECOSYSTEM.id,
+      hub: hubUrl(privateEnv.EWIN_SITE_URL),
+      descriptor: '/api/ecosystem/manifest',
+      sso: Boolean(privateEnv.EWIN_CONVEX_SITE_URL || process.env.EWIN_CONVEX_SITE_URL),
+      version: ecosystemDescriptor(appUrl(publicEnv.PUBLIC_SITE_URL)).version
+    }
   });
 };

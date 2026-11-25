@@ -1,3 +1,20 @@
+/sw.js
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /
+
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: public, max-age=3600
+
+/icons/*
+  Cache-Control: public, max-age=604800
+
+/screenshots/*
+  Cache-Control: public, max-age=604800
+
+/offline
+  Cache-Control: public, max-age=0, must-revalidate
+
 /images/generated/*
   Cache-Control: public, max-age=31536000, immutable
 

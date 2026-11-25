@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowRight, Sparkles, ShieldCheck, BrainCircuit, Coins, Gauge, Wallet, Network, CircleCheck } from '@lucide/svelte';
+  import { ArrowRight, Sparkles, ShieldCheck, BrainCircuit, Coins, Gauge, Wallet, Network, CircleCheck, Download, ExternalLink } from '@lucide/svelte';
   import ResponsiveImage from '#lib/components/media/ResponsiveImage.svelte';
   import ImageSlider from '#lib/components/media/ImageSlider.svelte';
   import MotionGraphic from '#lib/components/media/MotionGraphic.svelte';
@@ -323,3 +323,36 @@
 <section class="mx-auto max-w-[1200px] px-4 pb-16 sm:px-6">
   <NavigationBanner banner={navigationBanners[2]} />
 </section>
+
+<!-- ── Ecosystem footer ────────────────────────────────────────────────── -->
+<footer class="border-t border-white/[0.07] bg-black/20">
+  <div class="mx-auto flex max-w-[1200px] flex-col gap-5 px-4 py-9 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+    <div class="max-w-md">
+      <div class="flex items-center gap-2 text-[12px] font-semibold text-white">
+        <Network size={14} class="text-sky" /> Part of the E-WIN Project ecosystem
+      </div>
+      <p class="mt-1.5 text-[10.5px] leading-relaxed text-fog-dim">
+        One E-WIN identity across every application. CaveBettor is installable as an app on your phone, keeps working
+        on a weak connection, and never takes a deposit or places a bet. 18+.
+      </p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <a
+        class="btn btn-ghost !py-2 text-[11px]"
+        href="https://ewinproject.org"
+        target="_blank"
+        rel="noopener"
+      >
+        E-WIN Project hub <ExternalLink size={11} />
+      </a>
+      <a class="btn btn-ghost !py-2 text-[11px]" href="/dashboard">
+        <Download size={12} /> Install the app
+      </a>
+      <a class="btn btn-ghost !py-2 text-[11px]" href="/auth/login">Sign in</a>
+      <a class="btn btn-primary !py-2 text-[11px]" href="/auth/register">Create workspace</a>
+    </div>
+  </div>
+  <div class="mx-auto max-w-[1200px] border-t border-white/[0.05] px-4 py-4 text-[9.5px] text-fog-dim sm:px-6">
+    CaveBettor · Lagos, Nigeria · Naira-first sports intelligence · Research only, no wagering services.
+  </div>
+</footer>

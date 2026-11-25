@@ -10,6 +10,12 @@
   the root layout so both the static public pages and the workspace share the
   same design system.
 -->
-<AppShell liveCount={data.counts.live} valueCount={data.counts.value} fixturesCount={data.counts.fixtures} user={data.user}>
+<AppShell
+  liveCount={data.counts.live}
+  valueCount={data.counts.value}
+  fixturesCount={data.counts.fixtures}
+  user={data.user}
+  ecosystem={data.ecosystem}
+>
   {@render children()}
 </AppShell>

@@ -9,6 +9,7 @@
   import Gauge from '#lib/components/Gauge.svelte';
   import ConfidenceMeter from '#lib/components/ConfidenceMeter.svelte';
   import FormPills from '#lib/components/FormPills.svelte';
+  import InstallApp from '#lib/components/InstallApp.svelte';
   import { fmtNgn, pct, signed } from '#lib/engine/core';
   import { formatDate, formatKickoff, relativeTime, countdown } from '#lib/format';
   import { LEAGUE_MAP, SPORT_MAP, TEAM_MAP } from '#lib/data/catalog';
@@ -52,6 +53,8 @@
 <svelte:head><title>CaveBettor — Command Centre</title></svelte:head>
 
 <div class="space-y-5">
+  <!-- Shown once per week on an uninstalled device; self-hides when installed. -->
+  <InstallApp variant="bar" />
   <!-- Header -->
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
