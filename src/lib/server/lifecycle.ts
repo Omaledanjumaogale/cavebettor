@@ -115,7 +115,10 @@ export function settleStale(fixtures: Fixture[], now = Date.now()): Fixture[] {
   let changed = false;
   const next = fixtures.map((fixture) => {
     const life = lifecycleOf(fixture, now);
-    if (life.state !== 'finished' || fixture.status === 'finished') return fixture;
+    if (life.state !== 'finished') return fixture;
+    // Every finished fixture gets a finish stamp, so the boards can say when
+    // the whistle went instead of falling back to the kick-off time.
+    if (fixture.status === 'finished' && fixture.finishedAt) return fixture;
     changed = true;
     return {
       ...fixture,
