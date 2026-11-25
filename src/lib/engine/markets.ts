@@ -174,7 +174,10 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
   // expectation towards the competition average. Building the prior that way
   // keeps live totals sane and makes every edge a disagreement about the
   // fixture, never about a mismatched match state.
-  const live = fixture.status === 'live';
+  // Half time is in play. Treating it as pre-match left the consensus view on
+  // the kick-off line while the model read the scoreboard, which showed up as a
+  // 68-point 'edge' on a half-time team total.
+  const live = fixture.status === 'live' || fixture.status === 'halftime';
   const scored = fixture.score.home + fixture.score.away;
   // Live: the desk has the same scoreboard, so it only disagrees about the
   // remaining goals. Pre-match: it shrinks the fixture towards the league.
@@ -212,12 +215,20 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     scope: string
   ) => {
     const lines = safeLineSet(mean, sigma, opts.step, { min: opts.min, count: opts.count ?? 2, half: opts.half });
-    const scoredSide = fixture.status === 'live'
+    const scoredSide = live
       ? (side === 'home' ? fixture.score.home : fixture.score.away)
       : 0;
-    const priorMean = fixture.status === 'live'
-      ? scoredSide + 0.85 * Math.max(0, mean - scoredSide)
-      : 0.55 * mean + 0.45 * profile.perTeam;
+    // A team total is a projection, not a hedge: at half time the consensus
+    // desk and the model agree on how many more points this side scores. The
+    // old 0.85 damping pulled the prior a full seven points below the model and
+    // turned that difference into a fake 27-point edge on live NBA overs.
+    // The line is quoted off this fixture's own projection, so the consensus
+    // view has to start from the same projection and only shade it towards the
+    // competition's per-team rate. A 45% league weight put the prior ten points
+    // under a good offence and priced a 76% line against a 52% prior.
+    const priorMean = live
+      ? scoredSide + 0.96 * Math.max(0, mean - scoredSide)
+      : 0.85 * mean + 0.15 * profile.perTeam;
     for (const line of [...lines.over, ...lines.under]) {
       const over = clamp(1 - normalCdf((line - mean) / sigma), 0.02, 0.98);
       if (over < 0.12 || over > 0.9) continue;
@@ -430,6 +441,12 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     const totalMean = core.expected.home + core.expected.away;
     const margin = core.margin || core.expected.home - core.expected.away;
     const pointSd = Math.max(6, core.sd);
+    // A game total is not as tight as the margin spread: NBA totals carry ~19
+    // points of standard deviation whatever the matchup looks like. Using the
+    // per-fixture margin spread quoted 75% on a 235.5 line that the league view
+    // priced at 54%, which is the same overconfidence the straight-win markets
+    // had before calibration.
+    const totalSd = Math.max(9, profile.sdTotal * 0.92);
 
     markets.push(
       mk(fixture, 'ml', 'match', 'Moneyline', 'Outright winner including overtime', [
@@ -448,7 +465,7 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     }
 
     // Totals ladder around the projected combined points (e.g. 156.5 … 234.5).
-    numericTotal('total', 'Total points', 'Combined points over / under including overtime', totalMean, pointSd * 1.15, { step: 4.5, min: 40, count: 3 }, 'match');
+    numericTotal('total', 'Total points', 'Combined points over / under including overtime', totalMean, totalSd, { step: 4.5, min: 40, count: 3 }, 'match');
 
     // First-half totals around half the projection.
     numericTotal(
@@ -456,8 +473,8 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       '1st half points',
       'Combined points in the first half',
       totalMean / 2.02,
-      (pointSd * 1.15) / 1.9,
-      { step: 4.5, min: 30, count: 2, priorMean: 0.5 * (totalMean / 2.02) + 0.5 * (profile.total / 2.02), priorSd: ((pointSd * 1.15) / 1.9) * 1.08 },
+      totalSd / 1.9,
+      { step: 4.5, min: 30, count: 2, priorMean: 0.5 * (totalMean / 2.02) + 0.5 * (profile.total / 2.02), priorSd: (totalSd / 1.9) * 1.08 },
       '1st half'
     );
 
@@ -591,7 +608,19 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
         { label: `first set under ${fmtLine(firstSetLine)}`, probability: 1 - firstSetOver, prior: 1 - firstSetOver }
       ])
     );
-    numericTotal('games', 'Total games', 'Games in the match', gamesMean, 3.6, { step: 1, min: 12.5, count: 2 }, 'match');
+    // The competition profile and the format can disagree (a best-of-three
+    // match in a 'Grand Slam' competition name), so the consensus view is taken
+    // from the format the model actually priced.
+    const formatGames = bestOfFive ? 38.5 : 22.5;
+    numericTotal(
+      'games',
+      'Total games',
+      'Games in the match',
+      gamesMean,
+      3.6,
+      { step: 1, min: 12.5, count: 2, priorMean: 0.5 * gamesMean + 0.5 * formatGames, priorSd: 4 },
+      'match'
+    );
   }
 
   return markets;

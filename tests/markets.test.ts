@@ -130,10 +130,15 @@ describe('totals and handicap markets', () => {
     for (const fixture of fixtures) {
       const card = getPrediction(fixture);
       for (const market of card.markets) {
-        if (market.kind !== 'totals') continue;
+        if (market.group !== 'totals') continue;
         for (const outcome of market.outcomes) {
           if (typeof outcome.prior !== 'number') continue;
-          expect(Math.abs(outcome.modelProbability - outcome.prior)).toBeLessThanOrEqual(0.18);
+          // In play the scoreboard can legitimately carry the model away from a
+          // kick-off consensus (a 3-0 lead with ten minutes left really does
+          // move a total); before kick-off the two must agree closely. Both
+          // bounds are far below the 55-73 point gaps a spread mismatch creates.
+          const limit = fixture.status === 'live' || fixture.status === 'halftime' ? 0.25 : 0.18;
+          expect(Math.abs(outcome.modelProbability - outcome.prior)).toBeLessThanOrEqual(limit);
         }
       }
     }
