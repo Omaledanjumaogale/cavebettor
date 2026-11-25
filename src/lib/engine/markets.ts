@@ -530,8 +530,17 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       mk(fixture, 'set1', 'sets', 'First set winner', 'Result of the opening set', [
         { label: home.shortName, probability: core.periods[0].home }, { label: away.shortName, probability: core.periods[0].away }
       ]),
-      mk(fixture, 'set1games', 'sets', 'First set games 9.5', 'Games in the opening set', [
-        { label: 'Over 9.5', probability: core.periods[0].over }, { label: 'Under 9.5', probability: core.periods[0].under }
+    );
+    // The opening-set games line is priced from the opening set's own
+    // expectation and carries a consensus prior, like every other total.
+    const firstSet = core.periods[0];
+    const firstSetLine = Math.max(5.5, halfLine(firstSet.total));
+    const firstSetSd = Math.max(1.4, Math.sqrt(Math.max(4, firstSet.total)) * 1.15);
+    const firstSetOver = clamp(1 - normalCdf((firstSetLine - firstSet.total) / firstSetSd), 0.05, 0.95);
+    markets.push(
+      mk(fixture, 'set1games', 'sets', `First set games ${fmtLine(firstSetLine)}`, 'Games in the opening set', [
+        { label: `first set over ${fmtLine(firstSetLine)}`, probability: firstSetOver, prior: firstSetOver },
+        { label: `first set under ${fmtLine(firstSetLine)}`, probability: 1 - firstSetOver, prior: 1 - firstSetOver }
       ])
     );
     numericTotal('games', 'Total games', 'Games in the match', gamesMean, 3.6, { step: 1, min: 12.5, count: 2 }, 'match');

@@ -999,26 +999,10 @@ function buildRecommendations(valueBets: ValueBet[], markets: Market[], fixture:
     }));
   }
 
-  const core = markets.find((m) => m.id === '1x2' || m.id === 'ml');
-  const home = homeTeam(fixture);
-  const away = awayTeam(fixture);
-  const fallback = core?.outcomes.reduce((a, b) => (b.modelProbability > a.modelProbability ? b : a));
-  const label = (value: string) => fullName(value, home.name, away.name, home.shortName, away.shortName);
-  return [
-    {
-      selection: fallback ? label(fallback.label) : 'No bet',
-      market: core ? label(core.label) : 'Match result',
-      marketId: core?.id,
-      outcomeId: fallback?.id,
-      odds: fallback?.bookOdds ?? 2,
-      modelProbability: fallback?.modelProbability ?? 0.5,
-      edge: fallback ? fallback.modelProbability * fallback.bookOdds - 1 : 0,
-      stakeNgn: 0,
-      confidence: fallback?.confidence ?? 60,
-      rationale: 'No selection clears both the strike-rate and value thresholds. The model passes on this fixture - the most likely result is shown for reference only.',
-      risk: 'medium'
-    }
-  ];
+  // No selection cleared both the strike-rate and value thresholds. The board
+  // publishes nothing: a 40% reference row inside a "likely winners" list is
+  // exactly the doubt this product exists to remove.
+  return [];
 }
 
 function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: Fixture): Recommendation {

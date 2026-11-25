@@ -2,7 +2,10 @@
   import { onMount } from 'svelte';
   import { WifiOff, RefreshCw, Radio, Sparkles } from '@lucide/svelte';
 
-  let online = $state(true);
+  // The page is prerendered as the offline notice, so the offline copy is the
+  // one baked into the HTML. If the device turns out to be online, the mount
+  // handler swaps in the "reconnecting" copy.
+  let online = $state(false);
 
   onMount(() => {
     online = navigator.onLine;
