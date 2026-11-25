@@ -203,18 +203,21 @@
       </div>
 
       <div class="panel p-4">
-        <SectionHeader title="Just finished" description="Settled results" eyebrow="Full time" />
+        <SectionHeader title="Just finished" description={`Full time · kept ${data.finishedWindowHours}h, then archived for retraining`} eyebrow="Results" />
         <div class="space-y-1.5">
           {#each data.recent as match}
             <a href={`/fixtures/${match.fixture.id}`} class="flex items-center gap-2 rounded-lg px-1.5 py-2 text-[10.5px] transition hover:bg-white/[0.03]">
               <span class="h-5 w-1 rounded-full" style={`background:${match.league.colour}`}></span>
               <div class="min-w-0 flex-1">
                 <div class="truncate text-white/80">{match.home.name} vs {match.away.name}</div>
-                <div class="text-[9px] text-fog-dim">{match.league.name}</div>
+                <div class="text-[9px] text-fog-dim">{match.league.name} · {relativeTime(match.fixture.finishedAt ?? match.fixture.kickoff)}</div>
               </div>
               <span class="num font-semibold text-white">{match.fixture.score.home}–{match.fixture.score.away}</span>
             </a>
           {/each}
+          {#if data.recent.length === 0}
+            <p class="py-4 text-center text-[11px] text-fog-dim">No match has finished in the last {data.finishedWindowHours} hours.</p>
+          {/if}
         </div>
       </div>
 

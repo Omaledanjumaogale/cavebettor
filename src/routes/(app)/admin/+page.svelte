@@ -71,6 +71,20 @@
         No settled fixtures graded yet. Run “Retrain on results” after the next collection to build the calibration table.
       </p>
     {/if}
+
+    <!-- Retention proof: the board forgets a result after 24 hours, the archive keeps it. -->
+    <div class="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-[10px] text-fog-dim">
+      <span class="font-semibold uppercase tracking-[0.1em] text-fog">Result archive</span>
+      <span class="chip">{data.archive.records} settled matches</span>
+      <span class="chip">{data.archive.graded} graded markets</span>
+      {#if data.archive.hitRate !== null}
+        <span class="chip chip-mint">{(data.archive.hitRate * 100).toFixed(1)}% archived hit rate</span>
+      {/if}
+      <span>Boards keep a result {data.archive.retentionHours}h, archive keeps it {data.archive.archiveDays} days</span>
+      {#if data.archive.newest}
+        <span>· newest {relativeTime(data.archive.newest)}</span>
+      {/if}
+    </div>
   </div>
 
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">

@@ -12,7 +12,11 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ params }) => {
   const [universe, cards] = await Promise.all([pageFixtureUniverse(), liveCards()]);
   const fixture = universe.fixtures.find((f) => f.id === params.id) ?? getFixture(params.id);
-  if (!fixture) throw error(404, 'Fixture not found');
+  if (!fixture) {
+    // Results leave the board 24 hours after full time; the settled markets
+    // stay in the retraining archive, not on a page.
+    throw error(404, 'This fixture has left the board. Results are archived 24 hours after full time and used to retrain the models.');
+  }
   const prediction = (await livePrediction(fixture.id)) ?? getPrediction(fixture);
   const cardFor = (f: typeof fixture) => cards?.[f.id] ?? cardOf(getPrediction(f));
   const league = fixtureLeague(fixture);

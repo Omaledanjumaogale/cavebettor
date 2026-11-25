@@ -80,14 +80,27 @@ const COUNTRY_CODE: Record<string, string> = {
   Canada: 'CA'
 };
 
-/** Live statuses per provider family. */
+/**
+ * Statuses that mean the match is being played right now.
+ *
+ * Suspended and interrupted matches are deliberately absent: a game that is
+ * stopped is not live, and treating it as live is how finished fixtures got
+ * stuck on the live board. Half time is handled separately so the clock can
+ * show the break.
+ */
 const LIVE_SHORT = new Set([
-  '1H', '2H', 'HT', 'ET', 'BT', 'P', 'SUSP', 'INT', 'LIVE',
-  'Q1', 'Q2', 'Q3', 'Q4', 'OT', 'AOT', 'BT',
+  '1H', '2H', 'ET', 'BT', 'P', 'LIVE',
+  'Q1', 'Q2', 'Q3', 'Q4', 'OT', 'BT',
   'P1', 'P2', 'P3', 'SO'
 ]);
 
-const FINISHED_SHORT = new Set(['FT', 'AET', 'PEN', 'AOT', 'AFTER GAME', 'ENDED', 'FINISHED']);
+/** Codes/strings that mean the match is over, whatever the sport. */
+const FINISHED_SHORT = new Set([
+  'FT', 'AET', 'PEN', 'AOT', 'AFTER GAME', 'ENDED', 'FINISHED', 'FINAL', 'GAME OVER', 'AP'
+]);
+
+/** Strings that mean the match will not be played (or has been abandoned). */
+const STOPPED_HINTS = ['POSTPONED', 'CANCEL', 'ABANDON', 'SUSPEND', 'INTERRUPT', 'AWARDED', 'WALKOVER', 'DELAY'];
 
 function text(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -122,15 +135,20 @@ function statusOf(raw: ApiFootballFixture, sport: ApiFootballSport): FixtureStat
   if (sport === 'nba') {
     // API-NBA uses 1 = scheduled, 2 = in play, 3 = finished.
     if (short === '3' || long === 'FINISHED' || long === 'FINAL') return 'finished';
-    if (short === '2' || long.includes('IN PROGRESS') || long.includes('HALFTIME')) return 'live';
-    if (long.includes('POSTPONED') || long.includes('CANCEL')) return 'postponed';
+    if (long.includes('HALFTIME') || short === 'HT') return 'halftime';
+    if (short === '2' || long.includes('IN PROGRESS')) return 'live';
+    if (STOPPED_HINTS.some((hint) => long.includes(hint))) return 'postponed';
     return 'scheduled';
   }
 
-  if (FINISHED_SHORT.has(short) || long.includes('FINISHED')) return 'finished';
-  if (LIVE_SHORT.has(short) || long.includes('PERIOD') || long.includes('HALF')) return 'live';
-  if (short === 'HT') return 'halftime';
-  if (short === 'POST' || short === 'CANC' || short === 'PST' || long.includes('POSTPONED') || long.includes('CANCEL')) {
+  // Settlement wins over everything: a provider that says "finished" or
+  // "after penalties" must never be read as still in play.
+  if (FINISHED_SHORT.has(short) || long.includes('FINISHED') || long.includes('FINAL')) return 'finished';
+  if (long.includes('AFTER ') || long.includes('ENDED')) return 'finished';
+  if (STOPPED_HINTS.some((hint) => long.includes(hint))) return 'postponed';
+  if (short === 'HT' || long.includes('HALF TIME') || long.includes('HALFTIME')) return 'halftime';
+  if (LIVE_SHORT.has(short) || long.includes('PERIOD') || long.includes('HALF') || long.includes('IN PLAY')) return 'live';
+  if (short === 'POST' || short === 'CANC' || short === 'PST' || short === 'SUSP' || short === 'INT') {
     return 'postponed';
   }
   return 'scheduled';

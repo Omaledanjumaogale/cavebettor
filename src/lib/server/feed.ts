@@ -3,6 +3,18 @@ import { fetchSportDay, fetchSportLive, isoDate, planFloor, type ApiFootballSpor
 import { normaliseProviderFixtures } from '#lib/server/providers/normalise';
 import { registerLeague, registerTeam } from '#lib/data/registry';
 import { getFixtures } from '#lib/engine/fixtures';
+import { getPrediction } from '#lib/engine/predictions';
+import { settleSelection, type GradedPick } from '#lib/engine/settlement';
+import {
+  FINISHED_TTL_MS,
+  lifecycleOf,
+  mergeSettlements,
+  partitionFixtures,
+  pruneSettlements,
+  settleStale,
+  settlementOf,
+  type SettlementRecord
+} from '#lib/server/lifecycle';
 import type { Fixture, SportId } from '#lib/types';
 
 /**
@@ -31,6 +43,14 @@ const FEED_KEY = 'feed/fixtures';
 const META_KEY = 'feed/meta';
 const LIVE_KEY = 'feed/live';
 const RESULTS_KEY = 'feed/results';
+/**
+ * Settlement archive: the retraining set. A finished match is copied here
+ * before it leaves the boards, so a 24-hour interface retention never costs
+ * the model its training data.
+ */
+const SETTLEMENTS_KEY = 'feed/settlements';
+/** Cache TTL for the archive is capped by the R2 layer; keep it at 45 days. */
+const SETTLEMENT_TTL_SAFE = 45 * 86_400_000;
 const LOCK_KEY = 'feed/lock';
 
 /** How long a collected feed is considered fresh for page rendering. */
@@ -160,6 +180,9 @@ export async function refreshProviderFeed(options: { liveOnly?: boolean; sports?
     hydrateRegistry(fixtures);
     // Plain write: reading first would cost a subrequest the free plan cannot spare.
     await writeCache(FEED_KEY, fixtures, 6 * 3600_000, 'api-football');
+    // Every collection also refreshes the retraining archive. It writes only
+    // when a new result appears, so the extra subrequests are rare.
+    await archiveSettlements(fixtures).catch(() => 0);
   }
   await writeCache(META_KEY, meta, 6 * 3600_000, 'api-football');
   feedMemo = null;
@@ -225,9 +248,20 @@ export async function readProviderFixtures(): Promise<Fixture[]> {
     fixtures.push(...byId.values());
   }
 
-  if (fixtures.length) hydrateRegistry(fixtures);
-  if (fixtures.length) feedMemo = { at: Date.now(), fixtures };
-  return fixtures;
+  // Lifecycle enforcement. A provider that still reports "live" long after the
+  // match must have ended cannot keep the fixture on the live board, and a
+  // result older than the retention window leaves the interface here — the
+  // settlement archive is what survives.
+  const now = Date.now();
+  const settled = settleStale(fixtures, now);
+  const buckets = partitionFixtures(settled, now);
+  const visible = [...buckets.live, ...buckets.upcoming, ...buckets.finished, ...buckets.postponed].sort(
+    (a, b) => +new Date(a.kickoff) - +new Date(b.kickoff)
+  );
+
+  if (visible.length) hydrateRegistry(visible);
+  if (visible.length) feedMemo = { at: now, fixtures: visible };
+  return visible;
 }
 
 let metaMemo: { at: number; value: (FeedMeta & { ageMs: number; stale: boolean }) | null } | null = null;
@@ -391,47 +425,155 @@ export async function refreshLiveNow(options: { sports?: ApiFootballSport[] } = 
     }
   }
 
-  if (!live.length) return 0;
-
   // Keep the other sports' live rows when this run only covers one sport.
   const previous = options.sports?.length ? await readCache<Fixture[]>(LIVE_KEY, true) : null;
   const previousRows = Array.isArray(previous?.value) ? previous.value : [];
+
+  // An empty sweep is meaningful: it means everything that was in play has
+  // finished. Returning early here used to leave the last match stuck on the
+  // live board until the next full collection.
+  if (!live.length && !previousRows.length) return 0;
+  if (!live.length && options.sports?.length && !previousRows.some((row) => target.includes(row.sport as ApiFootballSport))) {
+    return 0;
+  }
+
   const carried = options.sports?.length ? previousRows.filter((row) => !target.includes(row.sport as ApiFootballSport)) : [];
   const fixtures = dedupe([...carried, ...live]);
 
+  const now = Date.now();
+  const stored = await readCache<Record<string, { home: number; away: number; at: number; period?: string }>>(RESULTS_KEY, true);
+  const results = { ...(stored?.value ?? {}) };
+
+  // A match already recorded as finished must never re-enter the live board,
+  // even when the provider's sweep lags a cycle behind the final whistle.
+  const alreadySettled = new Set(Object.keys(results));
+  const fresh = fixtures.filter((row) => !alreadySettled.has(row.id));
+
+  // Rows the provider still calls live but which cannot be in play any more.
+  const stale = fresh.filter((row) => lifecycleOf(row, now).state === 'finished');
+  const inPlay = fresh.filter((row) => lifecycleOf(row, now).state === 'live');
+
   // Anything that was in play and is no longer in the sweep has finished.
-  const liveIds = new Set(fixtures.map((row) => row.id));
-  const departed = previousRows.filter((row) => target.includes(row.sport as ApiFootballSport) && !liveIds.has(row.id));
-  if (departed.length) {
-    const stored = await readCache<Record<string, { home: number; away: number; at: number; period?: string }>>(RESULTS_KEY, true);
-    const results = { ...(stored?.value ?? {}) };
-    for (const row of departed) {
-      results[row.id] = {
-        home: row.score?.home ?? 0,
-        away: row.score?.away ?? 0,
-        at: Date.now(),
-        period: row.period ?? 'FT'
-      };
-    }
+  const currentIds = new Set([...inPlay, ...stale].map((row) => row.id));
+  const departed = previousRows.filter(
+    (row) => target.includes(row.sport as ApiFootballSport) && !currentIds.has(row.id) && !alreadySettled.has(row.id)
+  );
+
+  const newlyFinished = [...departed, ...stale];
+  for (const row of newlyFinished) {
+    const life = lifecycleOf(row, now);
+    results[row.id] = {
+      home: row.score?.home ?? 0,
+      away: row.score?.away ?? 0,
+      at: life.state === 'finished' ? life.finishedAt : now,
+      period: row.period ?? 'FT'
+    };
+  }
+
+  if (newlyFinished.length) {
     // Keep the map small: one day of results is plenty for the board.
     const entries = Object.entries(results)
       .sort((a, b) => b[1].at - a[1].at)
       .slice(0, 400);
-    await writeCache(RESULTS_KEY, Object.fromEntries(entries), 24 * 3600_000, 'api-football');
+    await writeCache(RESULTS_KEY, Object.fromEntries(entries), FINISHED_TTL_MS, 'api-football');
+    // Retraining data survives the purge.
+    await archiveSettlements(
+      newlyFinished.map((row) => ({
+        ...row,
+        status: 'finished' as const,
+        finishedAt: new Date(results[row.id].at).toISOString()
+      })),
+      now
+    ).catch(() => 0);
   }
+
+  fixtures.length = 0;
+  fixtures.push(...inPlay);
 
   feedMemo = null;
-  if (fixtures.length) {
-    hydrateRegistry(fixtures);
-    await writeCache(LIVE_KEY, fixtures, 3 * 3600_000, 'api-football');
+  if (fixtures.length) hydrateRegistry(fixtures);
+  // Always write the sweep — an empty list is how the last match leaves the
+  // live board. Skipping the write when nothing is in play left stale rows in
+  // R2 that the next read would happily serve as "live" again.
+  await writeCache(LIVE_KEY, fixtures, 3 * 3600_000, 'api-football');
 
-    // Keep the headline metadata honest about what is in play right now.
-    const meta = await readCache<FeedMeta>(META_KEY, true);
-    if (meta && meta.value) {
-      await writeCache(META_KEY, { ...meta.value, liveCount: fixtures.length }, 6 * 3600_000, 'api-football');
-    }
+  // Keep the headline metadata honest about what is in play right now.
+  const meta = await readCache<FeedMeta>(META_KEY, true);
+  if (meta && meta.value) {
+    await writeCache(META_KEY, { ...meta.value, liveCount: fixtures.length }, 6 * 3600_000, 'api-football');
   }
   return fixtures.length;
+}
+
+/**
+ * Copy settled matches into the retraining archive.
+ *
+ * This is the only reason a purge is safe: the interface keeps a result for a
+ * day, the archive keeps the score, the periods and the competition for 45
+ * days so the learning loop can re-price it long after it left the board.
+ */
+export async function archiveSettlements(rows: Fixture[], now = Date.now()): Promise<number> {
+  const finished = rows.filter((row) => row.status === 'finished');
+  if (!finished.length) return 0;
+  const stored = await readCache<SettlementRecord[]>(SETTLEMENTS_KEY, true);
+  const existing = Array.isArray(stored?.value) ? stored.value : [];
+  const incoming = finished.map((row) => settlementOf(row, now, gradePicks(row)));
+  const merged = pruneSettlements(mergeSettlements(existing, incoming), now);
+  await writeCache(SETTLEMENTS_KEY, merged, SETTLEMENT_TTL_SAFE, 'api-football');
+  return merged.length;
+}
+
+/** The archived settlement set, for the learning loop and the admin console. */
+export async function readSettlements(): Promise<SettlementRecord[]> {
+  const stored = await readCache<SettlementRecord[]>(SETTLEMENTS_KEY, true);
+  return Array.isArray(stored?.value) ? stored.value : [];
+}
+
+/**
+ * Freeze the model's calls on a match that has just settled.
+ *
+ * The board only stands behind two picks per fixture — the leading call and
+ * the best totals call — so those are what get graded and archived. A pick
+ * whose result is ambiguous settles to `null` and is skipped rather than
+ * guessed at.
+ */
+function gradePicks(fixture: Fixture): GradedPick[] {
+  let card;
+  try {
+    card = getPrediction(fixture);
+  } catch {
+    return [];
+  }
+  const candidates = [
+    card.recommendations[0],
+    card.recommendations.find((rec) => /^(ou|total)/.test(rec.marketId || ''))
+  ].filter((rec): rec is NonNullable<typeof rec> => Boolean(rec));
+
+  const picks: GradedPick[] = [];
+  for (const rec of candidates) {
+    const won = settleSelection(fixture, rec.marketId ?? '', rec.selection);
+    if (won === null) continue;
+    if (picks.some((pick) => pick.marketId === rec.marketId && pick.selection === rec.selection)) continue;
+    picks.push({
+      marketId: rec.marketId ?? '',
+      market: rec.market,
+      selection: rec.selection,
+      probability: rec.modelProbability,
+      odds: rec.odds,
+      won
+    });
+  }
+  return picks;
+}
+
+/**
+ * Results inside the retention window, newest first. This is the only source
+ * the finished boards read, so a purged match cannot reappear.
+ */
+export async function finishedFeed(limit = 40): Promise<Fixture[]> {
+  const fixtures = await readProviderFixtures();
+  const { finished } = partitionFixtures(fixtures);
+  return finished.slice(0, limit);
 }
 
 /** Sports that currently have provider fixtures, with counts. */

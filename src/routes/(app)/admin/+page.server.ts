@@ -3,6 +3,8 @@ import { DATA_SOURCES, MODELS } from '#lib/data/catalog';
 import { getMetrics, getScrapeJobs, getTrainingRuns } from '#lib/engine/analytics';
 import { convexAdminOverview, syncLiveData } from '#lib/server/live';
 import { readLearning, refreshLearning } from '#lib/server/learning';
+import { readSettlements } from '#lib/server/feed';
+import { FINISHED_TTL_MS, SETTLEMENT_TTL_MS } from '#lib/server/lifecycle';
 import { providerConfigured } from '#lib/server/auth';
 import { env as privateEnv } from '$env/dynamic/private';
 import type { Actions, PageServerLoad } from './$types';
@@ -14,6 +16,20 @@ export const load: PageServerLoad = async ({ locals }) => {
   // The learning loop is part of the console: settled results, the calibration
   // table and how much the model has corrected itself.
   const learning = (await readLearning().catch(() => null)) ?? null;
+  // The interface keeps a result for a day; the archive keeps the graded
+  // markets for retraining. This is what proves the purge is lossless.
+  const settlements = await readSettlements().catch(() => []);
+  const graded = settlements.flatMap((record) => record.picks ?? []);
+  const archive = {
+    records: settlements.length,
+    graded: graded.length,
+    wins: graded.filter((pick) => pick.won).length,
+    hitRate: graded.length ? graded.filter((pick) => pick.won).length / graded.length : null,
+    oldest: settlements.at(-1)?.finishedAt ?? null,
+    newest: settlements[0]?.finishedAt ?? null,
+    retentionHours: FINISHED_TTL_MS / 3_600_000,
+    archiveDays: Math.round(SETTLEMENT_TTL_MS / 86_400_000)
+  };
   const users = [
     { name: 'Omale Danjuma', email: 'omale@cavebettor.ng', plan: 'Pro', status: 'active', workspace: 'Lagos Value Desk', joined: '2025-08-14', apiCalls: 18420 },
     { name: 'Amara Eze', email: 'amara@cavebettor.ng', plan: 'Pro', status: 'active', workspace: 'Lagos Value Desk', joined: '2025-09-02', apiCalls: 9120 },
@@ -56,6 +72,7 @@ export const load: PageServerLoad = async ({ locals }) => {
             sports: learning.sports,
             sample: learning.sample.slice(0, 6)
           },
+    archive,
     integrations,
     live: overview,
     metrics,

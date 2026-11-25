@@ -45,9 +45,15 @@ describe('provider feed read model', () => {
       [fixture('a'), fixture('b'), fixture('c')],
       60_000
     );
+    // Live rows must look like they kicked off recently, otherwise the
+    // lifecycle layer is right to call them finished.
+    const kickedOff = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
     await writeCache(
       LIVE_KEY,
-      [fixture('b', { status: 'live', minute: 63, score: { home: 2, away: 1 } }), fixture('d', { status: 'live', minute: 5 })],
+      [
+        fixture('b', { status: 'live', minute: 63, kickoff: kickedOff(70), score: { home: 2, away: 1 } }),
+        fixture('d', { status: 'live', minute: 5, kickoff: kickedOff(10) })
+      ],
       60_000
     );
 

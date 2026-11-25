@@ -14,9 +14,12 @@
 import { getFixtures } from '#lib/engine/fixtures';
 import { getPrediction } from '#lib/engine/predictions';
 import { setLearnedCalibration } from '#lib/engine/scoring';
+import { settleSelection, type GradedPick } from '#lib/engine/settlement';
 import type { CalibrationBucket } from '#lib/engine/scoring';
 import { readCache, writeCache } from '#lib/server/cache';
-import { readProviderFixtures } from './feed';
+import { resolveTeam } from '#lib/data/registry';
+import { readProviderFixtures, readSettlements } from './feed';
+import type { SettlementRecord } from './lifecycle';
 import type { Fixture } from '#lib/types';
 
 const KEY = 'engine/learning-v1';
@@ -42,45 +45,33 @@ function bucketOf(probability: number): string {
   return `${from.toFixed(1)}-${(from + 0.1).toFixed(1)}`;
 }
 
-/** Did this market outcome settle? Only markets whose result is unambiguous. */
-function settled(fixture: Fixture, marketId: string, selection: string): boolean | null {
-  const home = fixture.score.home;
-  const away = fixture.score.away;
-  const total = home + away;
-  const margin = home - away;
-  const label = selection.toLowerCase();
-
-  if (marketId === '1x2' || marketId === 'ml') {
-    // A selection is the team name; "draw" is the drawn game.
-    const homeName = (fixture.homeTeam?.name ?? '').toLowerCase();
-    const awayName = (fixture.awayTeam?.name ?? '').toLowerCase();
-    if (label === 'draw') return margin === 0;
-    if (homeName && label.includes(homeName)) return margin > 0;
-    if (awayName && label.includes(awayName)) return margin < 0;
-    return null;
-  }
-
-  if (marketId === 'btts') return label.startsWith('yes') ? home > 0 && away > 0 : !(home > 0 && away > 0);
-
-  if (marketId === 'dc') {
-    if (label.includes(' or draw') && label.includes('/')) return null;
-    if (label.includes(' or ')) {
-      if (label.startsWith('draw')) return margin <= 0;
-      const homeName = (fixture.homeTeam?.name ?? '').toLowerCase();
-      if (homeName && label.startsWith(homeName)) return margin >= 0;
-      return margin <= 0;
-    }
-    return null;
-  }
-
-  // Full-time totals only: "match over 2.5" / "match under 2.5".
-  const totals = /^(?:match\s+)?(over|under)\s+([0-9]+(?:\.[0-9]+)?)/i.exec(selection);
-  if (totals && /^(ou|total)/.test(marketId)) {
-    const line = Number(totals[2]);
-    return totals[1].toLowerCase() === 'over' ? total > line : total < line;
-  }
-
-  return null;
+/**
+ * Rebuild a fixture from an archived settlement.
+ *
+ * The interface forgets a result after 24 hours; the archive does not. This is
+ * how a match that left the board a month ago still counts as a training row.
+ */
+function fixtureFromSettlement(record: SettlementRecord): Fixture {
+  const home = resolveTeam(record.homeId, record.leagueId);
+  const away = resolveTeam(record.awayId, record.leagueId);
+  return {
+    id: record.id,
+    sport: record.sport,
+    leagueId: record.leagueId,
+    homeId: record.homeId,
+    awayId: record.awayId,
+    homeTeam: record.homeName ? { ...home, name: record.homeName } : home,
+    awayTeam: record.awayName ? { ...away, name: record.awayName } : away,
+    kickoff: record.kickoff,
+    status: 'finished',
+    score: record.score,
+    periods: record.periods,
+    finishedAt: record.finishedAt,
+    venue: 'Settlement archive',
+    round: '',
+    h2h: { homeWins: 0, draws: 0, awayWins: 0, last: [] },
+    source: 'api-football'
+  };
 }
 
 /** Re-price every settled fixture and rebuild the calibration table. */
@@ -95,10 +86,65 @@ export async function refreshLearning(force = false): Promise<LearningReport> {
     return cached;
   }
 
-  const provider = await readProviderFixtures().catch(() => [] as Fixture[]);
-  const finished = [...provider.filter((f) => f.status === 'finished'), ...getFixtures().filter((f) => f.status === 'finished')]
+  const [provider, archived] = await Promise.all([
+    readProviderFixtures().catch(() => [] as Fixture[]),
+    readSettlements().catch(() => [] as SettlementRecord[])
+  ]);
+  // In-window results first (re-priced with the freshest state), then the
+  // archive so purging a match from the board never removes training data.
+  const finished = [
+    ...provider.filter((f) => f.status === 'finished'),
+    ...getFixtures().filter((f) => f.status === 'finished'),
+    ...archived.map(fixtureFromSettlement)
+  ]
     .filter((f, i, arr) => arr.findIndex((x) => x.id === f.id) === i)
     .slice(0, MAX_ROWS);
+
+  interface TrainingRow {
+    id: string;
+    leagueId: string;
+    sport: string;
+    picks: GradedPick[];
+  }
+
+  const training = new Map<string, TrainingRow>();
+
+  // Re-price an in-window match with the current model.
+  for (const fixture of finished) {
+    let card;
+    try {
+      card = getPrediction(fixture);
+    } catch {
+      continue;
+    }
+    // The market the model actually stood behind, plus its top totals call.
+    const candidates = [
+      card.recommendations[0],
+      card.recommendations.find((r) => /^(ou|total)/.test(r.marketId || ''))
+    ].filter((r): r is NonNullable<typeof r> => Boolean(r));
+
+    const picks: GradedPick[] = [];
+    for (const pick of candidates) {
+      const won = settleSelection(fixture, pick.marketId ?? '', pick.selection);
+      if (won === null) continue;
+      picks.push({
+        marketId: pick.marketId ?? '',
+        market: pick.market,
+        selection: pick.selection,
+        probability: pick.modelProbability,
+        odds: pick.odds,
+        won
+      });
+    }
+    if (picks.length) training.set(fixture.id, { id: fixture.id, leagueId: fixture.leagueId, sport: fixture.sport, picks });
+  }
+
+  // Archived picks were graded at full time against the model that made them,
+  // so they outrank a later re-price of the same match.
+  for (const record of archived) {
+    if (!record.picks?.length) continue;
+    training.set(record.id, { id: record.id, leagueId: record.leagueId, sport: record.sport, picks: record.picks });
+  }
 
   const buckets = new Map<string, { predicted: number; observed: number; n: number }>();
   const leagues = new Map<string, { leagueId: string; sport: string; predicted: number; observed: number; n: number }>();
@@ -108,52 +154,39 @@ export async function refreshLearning(force = false): Promise<LearningReport> {
   let observedSum = 0;
   let rows = 0;
 
-  for (const fixture of finished) {
-    let card;
-    try {
-      card = getPrediction(fixture);
-    } catch {
-      continue;
-    }
-    // Use the market the model actually stood behind, plus its top totals call.
-    const picks = [card.recommendations[0], card.recommendations.find((r) => /^(ou|total)/.test(r.marketId || ''))].filter(
-      (r): r is NonNullable<typeof r> => Boolean(r)
-    );
-    for (const pick of picks) {
-      const won = settled(fixture, pick.marketId ?? '', pick.selection);
-      if (won === null) continue;
-
-      const key = bucketOf(pick.modelProbability);
+  for (const entry of training.values()) {
+    for (const pick of entry.picks) {
+      const key = bucketOf(pick.probability);
       const bucket = buckets.get(key) ?? { predicted: 0, observed: 0, n: 0 };
-      bucket.predicted += pick.modelProbability;
-      bucket.observed += won ? 1 : 0;
+      bucket.predicted += pick.probability;
+      bucket.observed += pick.won ? 1 : 0;
       bucket.n += 1;
       buckets.set(key, bucket);
 
-      const league = leagues.get(fixture.leagueId) ?? {
-        leagueId: fixture.leagueId,
-        sport: fixture.sport,
+      const league = leagues.get(entry.leagueId) ?? {
+        leagueId: entry.leagueId,
+        sport: entry.sport,
         predicted: 0,
         observed: 0,
         n: 0
       };
-      league.predicted += pick.modelProbability;
-      league.observed += won ? 1 : 0;
+      league.predicted += pick.probability;
+      league.observed += pick.won ? 1 : 0;
       league.n += 1;
-      leagues.set(fixture.leagueId, league);
+      leagues.set(entry.leagueId, league);
 
-      const sport = sports.get(fixture.sport) ?? { sport: fixture.sport, predicted: 0, observed: 0, n: 0 };
-      sport.predicted += pick.modelProbability;
-      sport.observed += won ? 1 : 0;
+      const sport = sports.get(entry.sport) ?? { sport: entry.sport, predicted: 0, observed: 0, n: 0 };
+      sport.predicted += pick.probability;
+      sport.observed += pick.won ? 1 : 0;
       sport.n += 1;
-      sports.set(fixture.sport, sport);
+      sports.set(entry.sport, sport);
 
-      predictedSum += pick.modelProbability;
-      observedSum += won ? 1 : 0;
+      predictedSum += pick.probability;
+      observedSum += pick.won ? 1 : 0;
       rows += 1;
 
       if (sample.length < 24) {
-        sample.push({ fixtureId: fixture.id, selection: pick.selection, probability: pick.modelProbability, won });
+        sample.push({ fixtureId: entry.id, selection: pick.selection, probability: pick.probability, won: pick.won });
       }
     }
   }

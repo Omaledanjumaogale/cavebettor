@@ -4,6 +4,7 @@ import { getPrediction } from '#lib/engine/predictions';
 import { cardOf } from '#lib/snapshot';
 import { liveCards, readSnapshot } from '#lib/server/live';
 import { feedMeta, pageFixtureUniverse } from '#lib/server/feed';
+import { FINISHED_TTL_MS, partitionFixtures } from '#lib/server/lifecycle';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
@@ -26,9 +27,13 @@ export const load: PageServerLoad = async () => {
 
   if (fromFeed) {
     origin = 'provider';
-    liveRows = fixtures.filter((f) => f.status === 'live' || f.status === 'halftime');
-    recentRows = fixtures.filter((f) => f.status === 'finished').slice(-8).reverse();
-    upcomingRows = fixtures.filter((f) => f.status === 'scheduled').slice(0, 10);
+    // One source of truth for the buckets: nothing that can no longer be in
+    // play reaches the live list, and results are capped to the retention
+    // window so a purged match can never reappear here.
+    const buckets = partitionFixtures(fixtures);
+    liveRows = buckets.live;
+    recentRows = buckets.finished.slice(0, 12);
+    upcomingRows = buckets.upcoming.slice(0, 10);
   } else if (liveSnapshot?.live?.length || liveSnapshot?.upcoming?.length) {
     origin = 'convex';
     liveRows = liveSnapshot.live ?? [];
@@ -36,9 +41,10 @@ export const load: PageServerLoad = async () => {
     upcomingRows = liveSnapshot.upcoming ?? [];
   } else {
     origin = 'engine';
-    liveRows = fixtures.filter((f) => f.status === 'live' || f.status === 'halftime');
-    recentRows = fixtures.filter((f) => f.status === 'finished').slice(-8).reverse();
-    upcomingRows = fixtures.filter((f) => f.status === 'scheduled').slice(0, 10);
+    const buckets = partitionFixtures(fixtures);
+    liveRows = buckets.live;
+    recentRows = buckets.finished.slice(0, 12);
+    upcomingRows = buckets.upcoming.slice(0, 10);
   }
 
   const rows = (items: any[]) => items.map((row: any) => ({ fixture: row.fixture ?? row, prediction: row.prediction }));
@@ -74,6 +80,7 @@ export const load: PageServerLoad = async () => {
       providerFixtures: meta?.fixtureCount ?? 0,
       leagues: meta?.leagues ?? 0
     },
+    finishedWindowHours: FINISHED_TTL_MS / 3_600_000,
     counts: {
       live: packedLive.length,
       goals: packedLive.reduce((a, m: any) => a + (m.fixture.score?.home ?? 0) + (m.fixture.score?.away ?? 0), 0),

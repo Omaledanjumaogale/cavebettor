@@ -80,6 +80,12 @@
       <p class="mt-1 text-[12.5px] text-fog">
         {data.filteredTotal} fixtures match, of {data.total} in the universe · {data.stats.live} live · {data.stats.upcoming} upcoming · {data.stats.finished} finished
       </p>
+      {#if data.filters.status === 'finished'}
+        <p class="mt-1 text-[10.5px] text-fog-dim">
+          Results stay here for {data.finishedWindowHours} hours after full time. After that the match leaves the board —
+          its settled markets are archived and keep training the models.
+        </p>
+      {/if}
       <p class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-fog-dim">
         <span class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${data.feed.source === 'provider' ? 'border-mint/30 bg-mint/10 text-mint' : 'border-amber/30 bg-amber/10 text-amber'}`}>
           <span class="h-1.5 w-1.5 rounded-full bg-current"></span>

@@ -4,6 +4,7 @@ import { getPrediction } from '#lib/engine/predictions';
 import { cardOf } from '#lib/snapshot';
 import { liveCards } from '#lib/server/live';
 import { feedMeta, pageFixtureUniverse, sportCounts } from '#lib/server/feed';
+import { FINISHED_TTL_MS, lifecycleOf } from '#lib/server/lifecycle';
 import type { PageServerLoad } from './$types';
 
 const PAGE_SIZE = 48;
@@ -30,6 +31,13 @@ export const load: PageServerLoad = async ({ url }) => {
   const windowHours = WINDOWS[within] ?? 0;
   const now = Date.now();
 
+  // A result is only listed while it is inside the retention window; after
+  // that it has been archived for retraining and leaves the interface.
+  const inResultsWindow = (f: (typeof all)[number]) => {
+    const life = lifecycleOf(f);
+    return life.state === 'finished' && !life.expired;
+  };
+
   const filtered = all.filter((f) => {
     if (sport !== 'all' && f.sport !== sport) return false;
     if (league !== 'all' && f.leagueId !== league) return false;
@@ -39,7 +47,7 @@ export const load: PageServerLoad = async ({ url }) => {
     if (status === 'all' && f.status === 'finished') return false;
     if (status === 'live' && f.status !== 'live' && f.status !== 'halftime') return false;
     if (status === 'upcoming' && f.status !== 'scheduled') return false;
-    if (status === 'finished' && f.status !== 'finished') return false;
+    if (status === 'finished' && !inResultsWindow(f)) return false;
     if (windowHours) {
       const kickoff = +new Date(f.kickoff);
       if (f.status === 'finished') return false;
@@ -103,13 +111,14 @@ export const load: PageServerLoad = async ({ url }) => {
   const counts = sportCounts(all);
   const upcoming = all.filter((f) => f.status === 'scheduled').length;
   const live = all.filter((f) => f.status === 'live' || f.status === 'halftime').length;
-  const finished = all.filter((f) => f.status === 'finished').length;
+  const finished = all.filter(inResultsWindow).length;
 
   return {
     filters: { sport, league, status, q, view, day, within },
     total: all.length,
     filteredTotal: filtered.length,
     stats: { live, upcoming, finished, leagues: leagueCounts.size, provider: universe.source === 'provider' },
+    finishedWindowHours: FINISHED_TTL_MS / 3_600_000,
     sportCounts: counts,
     page: safePage,
     pageCount,
