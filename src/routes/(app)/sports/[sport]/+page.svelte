@@ -230,7 +230,7 @@
   <div class="panel p-4 sm:p-5">
     <SectionHeader
       title={`${def.name} stat board`}
-      description="The sport's own analytical fields, taken from the model rather than a generic template."
+      description="The sport's own analytical fields, in kick-off order — the next match leads the board."
       eyebrow="Detail"
     />
     {#if data.statRows.length === 0}
@@ -248,10 +248,15 @@
           </thead>
           <tbody>
             {#each data.statRows as row}
-              <tr>
+              <tr class={row.fixtureId === data.ordering.nextUpId ? 'bg-lime/[0.04]' : ''}>
                 <td>
                   <a href={`/fixtures/${row.fixtureId}`} class="block">
-                    <div class="text-[11px] font-semibold text-white">{row.label}</div>
+                    <div class="flex items-center gap-1.5 text-[11px] font-semibold text-white">
+                      {row.label}
+                      {#if row.fixtureId === data.ordering.nextUpId}
+                        <span class="rounded-full border border-lime/30 bg-lime/10 px-1.5 py-0 text-[8px] font-semibold uppercase tracking-[0.1em] text-lime">Next</span>
+                      {/if}
+                    </div>
                     <div class="text-[9.5px] text-fog-dim">{row.league} · {formatKickoff(row.kickoff)}</div>
                   </a>
                 </td>

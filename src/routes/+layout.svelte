@@ -3,12 +3,15 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { pwa } from '#lib/pwa.svelte';
+  import { clock } from '#lib/now.svelte';
   import type { Snippet } from 'svelte';
 
   let { children }: { children: Snippet } = $props();
 
   onMount(() => {
     pwa.init();
+    // One tick for every schedule label in the app.
+    clock.start();
 
     // A new worker taking over mid-session would otherwise leave the page on
     // the previous build's client bundle.
@@ -35,7 +38,10 @@
     };
 
     document.addEventListener('click', onClick, true);
-    return () => document.removeEventListener('click', onClick, true);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      clock.stop();
+    };
   });
 </script>
 

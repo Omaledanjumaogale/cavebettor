@@ -5,6 +5,7 @@ import { cardOf } from '#lib/snapshot';
 import { liveCards } from '#lib/server/live';
 import { feedMeta, pageFixtureUniverse, sportCounts } from '#lib/server/feed';
 import { FINISHED_TTL_MS, lifecycleOf } from '#lib/server/lifecycle';
+import { compareSchedule, nextUp, sortBySchedule } from '#lib/schedule';
 import type { PageServerLoad } from './$types';
 
 const PAGE_SIZE = 48;
@@ -60,19 +61,21 @@ export const load: PageServerLoad = async ({ url }) => {
     return true;
   });
 
+  // Rank by the schedule before slicing: the page must show the next matches,
+  // not the most likely ones. Probability ranks the value board instead.
+  const scheduled = status === 'finished' ? [...filtered].sort((a, b) => compareSchedule(b, a)) : sortBySchedule(filtered);
+
   // Predictions are only computed for the slice that is actually rendered.
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(scheduled.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
-  const window = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const window = scheduled.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   const rows = window
     .map((fixture) => ({ fixture, prediction: cards?.[fixture.id] ?? cardOf(getPrediction(fixture)) }))
-    .filter((row) => (status === 'value' ? row.prediction.valueBets.length > 0 : true))
-    // Ranked by the model's own probability: the most likely calls lead the page.
-    .sort((a, b) => {
-      const top = (row: (typeof rows)[number]) =>
-        Math.max(row.prediction.probabilities.home, row.prediction.probabilities.draw, row.prediction.probabilities.away);
-      return top(b) - top(a);
-    });
+    .filter((row) => (status === 'value' ? row.prediction.valueBets.length > 0 : true));
+
+  // The single earliest kick-off that has not started yet, marked on the page.
+  const upcomingNext = nextUp(rows, Date.now());
+  const nextUpId = upcomingNext?.fixture.id ?? null;
 
   // Every competition that actually has fixtures — provider leagues included.
   const leagueCounts = new Map<string, { id: string; name: string; shortName: string; sport: string; country: string; colour: string; count: number }>();
@@ -115,6 +118,11 @@ export const load: PageServerLoad = async ({ url }) => {
 
   return {
     filters: { sport, league, status, q, view, day, within },
+    ordering: {
+      by: status === 'finished' ? 'finishedAt:desc' : 'kickoff:asc',
+      generatedAt: new Date().toISOString(),
+      nextUpId
+    },
     total: all.length,
     filteredTotal: filtered.length,
     stats: { live, upcoming, finished, leagues: leagueCounts.size, provider: universe.source === 'provider' },

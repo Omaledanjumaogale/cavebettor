@@ -13,6 +13,7 @@
  *      is summarised into a settlement record (score, periods, competition,
  *      kick-off) and archived for retraining before it is purged.
  */
+import { compareSchedule } from '#lib/schedule';
 import type { GradedPick } from '#lib/engine/settlement';
 import type { Fixture, FixtureStatus, SportId } from '#lib/types';
 
@@ -164,7 +165,12 @@ export function partitionFixtures(fixtures: Fixture[], now = Date.now()): Partit
     }
   }
 
+  // Results read newest first (the last whistle leads). Everything still to be
+  // played reads by kick-off, so the next match is always at the top.
   partition.finished = finished.sort((a, b) => b.at - a.at).map((row) => row.fixture);
+  partition.live.sort(compareSchedule);
+  partition.upcoming.sort(compareSchedule);
+  partition.postponed.sort(compareSchedule);
   return partition;
 }
 

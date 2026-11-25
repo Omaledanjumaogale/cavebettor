@@ -5,6 +5,8 @@
   import FixtureCard from '#lib/components/FixtureCard.svelte';
   import MatchRow from '#lib/components/MatchRow.svelte';
   import { formatDate } from '#lib/format';
+  import { clock } from '#lib/now.svelte';
+  import { schedulePhase, sortRowsBySchedule } from '#lib/schedule';
 
   let { data } = $props();
   let search = $state(untrack(() => data.filters.q));
@@ -48,9 +50,28 @@
     update({ q: (e.target as HTMLInputElement).value });
   }
 
+  // The server sorts by kick-off; the client re-derives it from the shared
+  // comparator so the order survives any state change and the "next up" marker
+  // follows the clock. Results stay newest-first.
+  const ordered = $derived(
+    data.filters.status === 'finished'
+      ? [...data.fixtures].sort((a: any, b: any) => Date.parse(b.fixture.kickoff) - Date.parse(a.fixture.kickoff))
+      : sortRowsBySchedule(data.fixtures as any[])
+  );
+
+  const nextUpId = $derived.by(() => {
+    const now = clock.now;
+    for (const item of ordered as any[]) {
+      const phase = schedulePhase(item.fixture, now);
+      if (phase === 'live' || phase === 'past') continue;
+      return item.fixture.id as string;
+    }
+    return null;
+  });
+
   const groups = $derived.by(() => {
     const map = new Map<string, typeof data.fixtures>();
-    for (const item of data.fixtures) {
+    for (const item of ordered as any[]) {
       const date = item.fixture.status === 'finished' ? 'Full time' : formatDate(item.fixture.kickoff, { weekday: 'long', day: 'numeric', month: 'long', year: undefined });
       if (!map.has(date)) map.set(date, []);
       map.get(date)!.push(item);
@@ -92,6 +113,8 @@
           {data.feed.source === 'provider' ? 'Live provider feed' : 'Engine fallback'}
         </span>
         <span>{data.stats.leagues} competitions</span>
+        <span class="h-1 w-1 rounded-full bg-fog-dim"></span>
+        <span>{data.filters.status === 'finished' ? 'Newest result first' : 'Next kick-off first'}</span>
         <span class="h-1 w-1 rounded-full bg-fog-dim"></span>
         <span>{freshness}</span>
       </p>
@@ -194,7 +217,12 @@
           </div>
           <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {#each items as item}
-              <FixtureCard fixture={item.fixture} prediction={item.prediction} />
+              <div class={item.fixture.id === nextUpId ? 'relative rounded-[18px] ring-1 ring-lime/40' : 'relative'}>
+                {#if item.fixture.id === nextUpId}
+                  <span class="absolute -top-2 left-3 z-10 rounded-full border border-lime/30 bg-pitch-950 px-2 py-0.5 text-[8.5px] font-semibold uppercase tracking-[0.12em] text-lime">Next up</span>
+                {/if}
+                <FixtureCard fixture={item.fixture} prediction={item.prediction} />
+              </div>
             {/each}
           </div>
         </div>

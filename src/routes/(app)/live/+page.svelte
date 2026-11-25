@@ -8,6 +8,8 @@
   import ConfidenceMeter from '#lib/components/ConfidenceMeter.svelte';
   import FormPills from '#lib/components/FormPills.svelte';
   import SectionHeader from '#lib/components/SectionHeader.svelte';
+  import { clock } from '#lib/now.svelte';
+  import { schedulePhase, sortRowsBySchedule } from '#lib/schedule';
   import { formatKickoff, relativeTime } from '#lib/format';
   import { fmtNgn } from '#lib/engine/core';
 
@@ -17,7 +19,15 @@
   let refreshing = $state(false);
   let lastUpdate = $state(new Date().toISOString());
 
-  const shown = $derived(data.live.filter((m: any) => sport === 'all' || m.fixture.sport === sport));
+  // The live centre reads in kick-off order: the match that started first is
+  // at the top, and a new kick-off slots in without reshuffling the rest.
+  const orderedLive = $derived(sortRowsBySchedule(data.live as any[]));
+  const orderedUpcoming = $derived(sortRowsBySchedule(data.upcoming as any[]));
+  const shown = $derived((orderedLive as any[]).filter((m: any) => sport === 'all' || m.fixture.sport === sport));
+  const nextKickoff = $derived.by(() => {
+    const now = clock.now;
+    return (orderedUpcoming as any[]).find((row: any) => schedulePhase(row.fixture, now) !== 'past') ?? null;
+  });
   const allEdges = $derived(
     [...data.live.flatMap((m: any) => m.prediction.valueBets.map((b: any) => ({ ...b, fixture: m.fixture, home: m.home, away: m.away, league: m.league })))].sort((a, b) => b.edge - a.edge).slice(0, 8)
   );
@@ -222,14 +232,16 @@
       </div>
 
       <div class="panel p-4">
-        <SectionHeader title="Kicking off soon" description="Next matches" eyebrow="Upcoming" />
+        <SectionHeader title="Kicking off soon" description="Next matches, earliest first" eyebrow="Upcoming" />
         <div class="space-y-1.5">
-          {#each data.upcoming.slice(0, 5) as match}
-            <a href={`/fixtures/${match.fixture.id}`} class="flex items-center gap-2 rounded-lg px-1.5 py-2 text-[10.5px] transition hover:bg-white/[0.03]">
+          {#each orderedUpcoming.slice(0, 5) as match}
+            <a href={`/fixtures/${match.fixture.id}`} class={`flex items-center gap-2 rounded-lg px-1.5 py-2 text-[10.5px] transition hover:bg-white/[0.03] ${nextKickoff && match.fixture.id === nextKickoff.fixture.id ? 'bg-lime/[0.06]' : ''}`}>
               <Clock size={11} class="shrink-0 text-fog-dim" />
               <div class="min-w-0 flex-1">
                 <div class="truncate text-white/80">{match.home.name} vs {match.away.name}</div>
-                <div class="text-[9px] text-fog-dim">{formatKickoff(match.fixture.kickoff)}</div>
+                <div class="text-[9px] text-fog-dim">
+                  {formatKickoff(match.fixture.kickoff)}{#if nextKickoff && match.fixture.id === nextKickoff.fixture.id} · next up{/if}
+                </div>
               </div>
               <ChevronRight size={11} class="text-fog-dim" />
             </a>

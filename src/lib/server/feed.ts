@@ -3,6 +3,7 @@ import { fetchSportDay, fetchSportLive, isoDate, planFloor, type ApiFootballSpor
 import { normaliseProviderFixtures } from '#lib/server/providers/normalise';
 import { registerLeague, registerTeam } from '#lib/data/registry';
 import { getFixtures } from '#lib/engine/fixtures';
+import { sortBySchedule } from '#lib/schedule';
 import { getPrediction } from '#lib/engine/predictions';
 import { settleSelection, type GradedPick } from '#lib/engine/settlement';
 import {
@@ -332,9 +333,9 @@ export async function liveFeed(): Promise<Fixture[]> {
   const provider = await readProviderFixtures();
   // Real fixtures only: a live centre must never carry a placeholder match.
   const source = provider.length ? provider : getFixtures();
-  return source
-    .filter((f) => f.status === 'live' || f.status === 'halftime')
-    .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
+  // The live centre is a timetable, not a leaderboard: matches read in the
+  // order they kicked off, so the list does not reshuffle when a clock moves.
+  return sortBySchedule(source.filter((f) => f.status === 'live' || f.status === 'halftime'));
 }
 
 /**

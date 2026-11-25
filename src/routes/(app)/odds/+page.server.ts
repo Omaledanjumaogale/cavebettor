@@ -7,6 +7,7 @@ import { liveCards, livePrediction } from '#lib/server/live';
 import { pageFixtureUniverse } from '#lib/server/feed';
 import { applyMarketPrices, readMarketPrices } from '#lib/server/providers/marketFeed';
 import type { PageServerLoad } from './$types';
+import { sortBySchedule } from '#lib/schedule';
 
 export const load: PageServerLoad = async ({ url }) => {
   const [universe, cards, marketBundle] = await Promise.all([
@@ -15,7 +16,8 @@ export const load: PageServerLoad = async ({ url }) => {
     readMarketPrices()
   ]);
   // Price a bounded slate: the whole window is too large to model per request.
-  const upcoming = universe.fixtures.filter((f) => f.status !== 'finished').slice(0, 40);
+  // The slate is the next 40 kick-offs, in schedule order.
+  const upcoming = sortBySchedule(universe.fixtures.filter((f) => f.status !== 'finished')).slice(0, 40);
   const selectedId = url.searchParams.get('id') ?? upcoming[0]?.id;
   const fixture = upcoming.find((f) => f.id === selectedId) ?? upcoming[0];
   const prediction = (await livePrediction(fixture.id)) ?? getPrediction(fixture);

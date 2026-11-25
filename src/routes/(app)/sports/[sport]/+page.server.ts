@@ -5,6 +5,7 @@ import { getFixtures } from '#lib/engine/fixtures';
 import { getPrediction } from '#lib/engine/predictions';
 import { round } from '#lib/engine/core';
 import { mergedFixtures } from '#lib/server/feed';
+import { nextUp, sortBySchedule, sortRowsBySchedule } from '#lib/schedule';
 import { liveCards, liveFixtures } from '#lib/server/live';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
@@ -19,7 +20,8 @@ export const load: PageServerLoad = async ({ params }) => {
   // engine covers everything else. Both never cost a paid request here.
   const providerFixtures = feed.fixtures.filter((f) => def.leagueIds.includes(f.leagueId));
   const engineFixtures = getFixtures().filter((f) => def.leagueIds.includes(f.leagueId));
-  const source = providerFixtures.length ? providerFixtures : engineFixtures;
+  // The desk reads as a timetable: the next kick-off first, later ones below.
+  const source = sortBySchedule(providerFixtures.length ? providerFixtures : engineFixtures);
 
   const cardFor = (fixture: (typeof source)[number]) => {
     const full = getPrediction(fixture);
@@ -42,7 +44,8 @@ export const load: PageServerLoad = async ({ params }) => {
     };
   });
 
-  const active = rows.filter((r) => r.fixture.status !== 'finished');
+  const active = sortRowsBySchedule(rows.filter((r) => r.fixture.status !== 'finished'));
+  const deskNext = nextUp(active, Date.now());
   const valueRows = active.flatMap((r) =>
     r.prediction.valueBets.map((b) => ({
       ...b,
@@ -141,6 +144,7 @@ export const load: PageServerLoad = async ({ params }) => {
     markets: markets.slice(0, 12),
     leagues: byLeague,
     statRows,
+    ordering: { by: 'kickoff:asc', generatedAt: new Date().toISOString(), nextUpId: deskNext?.fixture.id ?? null },
     confidenceSeries,
     summary: {
       fixtures: rows.length,
