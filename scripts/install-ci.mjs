@@ -11,7 +11,7 @@
  * The script copies the reviewed file into place, commits it and pushes.
  */
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 const SOURCE = 'ops/ci/github-actions.yml';
 const TARGET = '.github/workflows/ci.yml';
@@ -47,7 +47,23 @@ mkdirSync('.github/workflows', { recursive: true });
 copyFileSync(SOURCE, TARGET);
 console.log(`Installed ${TARGET}`);
 
-run('git', ['add', TARGET]);
+// The workflow is kept out of the repo by `.git/info/exclude` until the scope
+// exists, so lift that exclusion before staging the file.
+const excludePath = '.git/info/exclude';
+if (existsSync(excludePath)) {
+  const before = readFileSync(excludePath, 'utf8');
+  const after = before
+    .split(/\r?\n/)
+    .filter((line) => !line.includes('.github/workflows/ci.yml'))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n');
+  if (after !== before) {
+    writeFileSync(excludePath, after);
+    console.log('Removed the local exclusion for .github/workflows/ci.yml');
+  }
+}
+
+run('git', ['add', '-f', TARGET]);
 run('git', ['-c', 'user.name=CaveBettor', '-c', 'user.email=dev@cavebettor.local', 'commit', '-m', 'CI: install the GitHub Actions workflow']);
 run('git', ['push', 'origin', 'main']);
 console.log('Pushed. Actions will run on the next push.');

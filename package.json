@@ -32,7 +32,6 @@
     "ci:install": "node scripts/install-ci.mjs"
   },
   "devDependencies": {
-    "@cloudflare/workerd-windows-64": "^1.20261119.1",
     "@sveltejs/adapter-cloudflare": "^7.2.10",
     "@sveltejs/kit": "latest",
     "@sveltejs/vite-plugin-svelte": "latest",
@@ -62,5 +61,8 @@
   },
   "imports": {
     "#lib/*": "./src/lib/*"
+  },
+  "optionalDependencies": {
+    "@cloudflare/workerd-windows-64": "^1.20261119.1"
   }
 }
