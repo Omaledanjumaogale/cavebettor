@@ -75,12 +75,53 @@ npm run assets:unique   # one-visual-per-placement guard
 npm run assets:check    # asset pipeline validation
 npm run verify:static   # assert the public pages exist as static HTML
 npm run production:verify  # verify assets and routes on the live domain
-npm run ci              # assets:unique + assets:check + check + test + build
+npm run pwa:verify      # 57-check install contract: manifest, worker, icons, descriptor
+npm run pwa:icons       # rasterise favicon.svg into the PNG sizes Android/iOS need
+npm run pwa:screenshots # capture real app screenshots for the install sheet
+npm run audit:markets   # fail if a published selection breaks the board rules
+npm run audit:schedule  # fail if any fixture surface is out of kick-off order
+npm run audit:pwa       # runtime install/offline/ecosystem audit against a live URL
+npm run ci              # assets:unique + assets:check + pwa:verify + check + test + build
+npm run ci:install      # install the reviewed GitHub Actions workflow (needs workflow scope)
 ```
 
-The GitHub Actions workflow that mirrors `npm run ci` and publishes to Cloudflare lives at
-`.github/workflows/ci.yml`. It needs a push token with the `workflow` scope
-(`gh auth refresh -s workflow`); until then the same checks run locally with `npm run ci`.
+The GitHub Actions workflow that mirrors `npm run ci` and publishes to Cloudflare is versioned at
+`ops/ci/github-actions.yml`. GitHub refuses workflow files from a token without the `workflow`
+scope, so it is installed rather than pushed directly:
+
+```bash
+gh auth refresh -s workflow   # one-time, browser approval
+npm run ci:install            # copies ops/ci/github-actions.yml into .github/workflows/ and pushes
+```
+
+Until that scope is granted the same checks run locally with `npm run ci`, and the browser audits
+(`audit:schedule`, `audit:pwa`) run against the deployed URL.
+
+### Progressive web app
+
+CaveBettor installs as an app on Android, iOS and desktop Chromium:
+
+- `static/manifest.webmanifest` — standalone display, maskable icons, screenshots, shortcuts to
+  Live, Value, Betslip and Fixtures, `start_url` of `/dashboard?source=pwa`.
+- `static/sw.js` — never caches `/api/` or `/auth/`; navigations are network-first with a 4.5 s
+  timeout and fall back to `/offline`; immutable assets are cache-first; public pages only, so a
+  shared phone cannot leak one account's workspace.
+- The worker also answers Cloudflare's speculation-rules request with an empty rule set, which
+  stops page prerendering (one Worker invocation each) and keeps the offline notice reachable.
+- `src/lib/pwa.svelte.ts` + `InstallApp.svelte` — install prompt on the dashboard, in Settings and
+  in the navigation drawer, with the iOS Share-sheet path and a dismiss-for-a-week rule.
+- `tests/service-worker.test.ts` runs the real worker against a fake CacheStorage and FetchEvent.
+
+### E-WIN ecosystem
+
+The app is one member of the E-WIN Project family and publishes the contract the hub reads:
+
+- `/.well-known/ewin-app.json` — static descriptor (app id, icon, endpoints, capabilities, deep links).
+- `/api/ecosystem/manifest` — the same descriptor, generated from `src/lib/ecosystem.ts`.
+- `/api/ecosystem/session` — identity bridge for the hub (no CORS, no token, session only).
+- `/api/health` — includes `pwa` and `ecosystem` blocks for monitoring.
+- Single sign-on runs through `/auth/ewin` → hub ticket → `/auth/ewin/callback`.
+- The hub link is in the navigation drawer, the Settings page and the landing-page footer.
 
 ### Static-first delivery
 

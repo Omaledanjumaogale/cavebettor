@@ -25,7 +25,11 @@
     "ci": "npm run assets:unique && npm run assets:check && npm run pwa:verify && npm run check && npm test && npm run build",
     "pwa:icons": "node scripts/build-pwa-icons.mjs",
     "pwa:screenshots": "node scripts/capture-pwa-screenshots.mjs",
-    "pwa:verify": "node scripts/verify-pwa.mjs"
+    "pwa:verify": "node scripts/verify-pwa.mjs",
+    "audit:markets": "tsx scripts/audit/markets.ts",
+    "audit:schedule": "node scripts/audit/schedule-order.mjs",
+    "audit:pwa": "node scripts/audit/pwa-runtime.mjs",
+    "ci:install": "node scripts/install-ci.mjs"
   },
   "devDependencies": {
     "@cloudflare/workerd-windows-64": "^1.20261119.1",
@@ -41,7 +45,8 @@
     "tsx": "^4.23.15",
     "typescript": "latest",
     "vite": "latest",
-    "vitest": "latest"
+    "vitest": "latest",
+    "playwright-core": "^1.56.1"
   },
   "dependencies": {
     "@fontsource-variable/inter": "latest",
