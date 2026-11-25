@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { deleteCache, writeCache } from '#lib/server/cache';
-import { readProviderFixtures, resetFeedMemo } from '#lib/server/feed';
+import { archiveSettlements, readProviderFixtures, readSettlements, resetFeedMemo } from '#lib/server/feed';
 
 const FEED_KEY = 'feed/fixtures';
 const LIVE_KEY = 'feed/live';
@@ -31,6 +31,7 @@ describe('provider feed read model', () => {
     await deleteCache(FEED_KEY);
     await deleteCache(LIVE_KEY);
     await deleteCache('feed/results');
+    await deleteCache('feed/settlements');
     resetFeedMemo();
   });
 
@@ -66,6 +67,28 @@ describe('provider feed read model', () => {
     expect(byId.get('b')!.score).toEqual({ home: 2, away: 1 });
     expect(byId.get('b')!.homeTeam?.name).toBe('Home FC');
     expect(byId.get('d')!.minute).toBe(5);
+  });
+
+  it('archives a settled match with its graded picks', async () => {
+    const settled = fixture('z', {
+      status: 'finished',
+      kickoff: new Date(Date.now() - 3 * 3600_000).toISOString(),
+      finishedOn: undefined,
+      score: { home: 2, away: 0 }
+    });
+    await archiveSettlements([settled as never]);
+    const archive = await readSettlements();
+    const record = archive.find((row) => row.id === 'z');
+    expect(record).toBeTruthy();
+    expect(record!.score).toEqual({ home: 2, away: 0 });
+    expect(record!.finishedAt).toBeTruthy();
+    // Graded picks are frozen at settlement so retraining never depends on a
+    // later model state.
+    expect(Array.isArray(record!.picks)).toBe(true);
+    for (const pick of record!.picks ?? []) {
+      expect(typeof pick.won).toBe('boolean');
+      expect(pick.probability).toBeGreaterThan(0);
+    }
   });
 
   it('serves the window alone when the live sweep is missing', async () => {
