@@ -13,7 +13,7 @@
  *      URL only ever points at one byte-identical file.
  */
 
-const VERSION = 'cb-v2';
+const VERSION = 'cb-v3';
 const SHELL_CACHE = `${VERSION}-shell`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const ASSET_CACHE = `${VERSION}-assets`;
@@ -161,6 +161,19 @@ self.addEventListener('fetch', (event) => {
   if (isPrivate(url) || isNeverCache(url)) return;
   // Range requests (media, PDFs) must not be stored.
   if (request.headers.has('range')) return;
+
+  // Cloudflare injects a speculation-rules set that prerenders pages on hover.
+  // Each prerender costs a Worker invocation, and a prerendered document is
+  // served from the browser's own cache when the radio drops — which hides the
+  // offline notice. Answering the ruleset locally disables both side effects.
+  if (url.pathname === '/cdn-cgi/speculation') {
+    event.respondWith(
+      new Response(JSON.stringify({ prerender: [], prefetch: [] }), {
+        headers: { 'content-type': 'application/speculationrules+json', 'cache-control': 'no-store' }
+      })
+    );
+    return;
+  }
 
   if (request.mode === 'navigate') {
     const store = PUBLIC_PAGES.includes(url.pathname) || PUBLIC_PAGES.includes(url.pathname.replace(/\/$/, ''));
