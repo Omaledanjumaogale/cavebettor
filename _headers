@@ -31,6 +31,10 @@
   Cache-Control: no-cache
 
 /*
+  # Cloudflare's injected speculation rules prerender pages on hover, which
+  # costs a Worker invocation per prefetch and serves stale documents when the
+  # device goes offline. An explicit empty rule set replaces the injection.
+  Speculation-Rules: "[]"
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
