@@ -9,6 +9,9 @@
   let { children }: { children: Snippet } = $props();
 
   onMount(() => {
+    // First registration activates and claims this page; that is not an update
+    // and must not reload it under the user.
+    const hadController = Boolean(navigator.serviceWorker?.controller);
     pwa.init();
     // One tick for every schedule label in the app.
     clock.start();
@@ -16,10 +19,10 @@
     // A new worker taking over mid-session would otherwise leave the page on
     // the previous build's client bundle.
     navigator.serviceWorker?.addEventListener?.('controllerchange', () => {
-      if (!sessionStorage.getItem('cb_sw_reloaded')) {
-        sessionStorage.setItem('cb_sw_reloaded', '1');
-        location.reload();
-      }
+      if (!hadController) return;
+      if (sessionStorage.getItem('cb_sw_reloaded')) return;
+      sessionStorage.setItem('cb_sw_reloaded', '1');
+      location.reload();
     });
 
     // Offline-safe navigation. SvelteKit routes on the client, so a tap on a
