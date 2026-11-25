@@ -34,6 +34,23 @@ const MAX_DURATION_MS: Record<SportId, number> = {
   tennis: 6 * 3600_000
 };
 
+/**
+ * Typical wall-clock length of a match, used to date a result when the provider
+ * sends no finish timestamp. The maximum above is the "can it still be live?"
+ * ceiling; this is the honest estimate of when the whistle went.
+ */
+const TYPICAL_DURATION_MS: Record<SportId, number> = {
+  football: 115 * 60_000,
+  basketball: 125 * 60_000,
+  icehockey: 140 * 60_000,
+  baseball: 180 * 60_000,
+  tennis: 150 * 60_000
+};
+
+export function typicalDurationMs(sport: SportId): number {
+  return TYPICAL_DURATION_MS[sport] ?? TYPICAL_DURATION_MS.football;
+}
+
 export const LIVE_STATUSES: FixtureStatus[] = ['live', 'halftime'];
 
 export function isLiveStatus(status: FixtureStatus): boolean {
@@ -50,8 +67,9 @@ export function finishedAtMs(fixture: Fixture, now = Date.now()): number {
   if (Number.isFinite(stamped)) return stamped;
   const kickoff = Date.parse(fixture.kickoff);
   if (!Number.isFinite(kickoff)) return now;
-  // No finish stamp: assume the match ran its full duration.
-  return Math.min(now, kickoff + maxDurationMs(fixture.sport));
+  // No finish stamp: date the result at the sport's typical length rather than
+  // its maximum, so the 24-hour clock starts near the real final whistle.
+  return Math.min(now, kickoff + typicalDurationMs(fixture.sport));
 }
 
 export type Lifecycle =
