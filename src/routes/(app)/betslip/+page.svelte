@@ -2,6 +2,7 @@
   import { Plus, Trash2, Download, Share2, Copy, Check, Search, Ticket, Wallet, Info, Save, Pencil, X, MessageCircle, FileText } from '@lucide/svelte';
   import SectionHeader from '#lib/components/SectionHeader.svelte';
   import AddToBetslip from '#lib/components/AddToBetslip.svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
   import { formatKickoff } from '#lib/format';
   import { fmtNgn } from '#lib/engine/core';
   import { betslip, encodeSlip, decodeSlip, type SlipLeg, type SavedSlip } from '#lib/betslip.svelte';
@@ -274,6 +275,7 @@
       <div class="max-h-[620px] overflow-y-auto">
         {#each filtered as selection (selection.id)}
           <div class="flex items-center gap-2 border-b border-white/[0.04] px-3 py-2 last:border-0">
+            <SportGlyph sport={selection.sport} size="xs" />
             <div class="min-w-0 flex-1">
               <div class="truncate text-[11px] font-medium text-white">{selection.fixtureLabel}</div>
               <div class="truncate text-[9.5px] text-fog-dim">

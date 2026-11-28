@@ -79,6 +79,7 @@ export function getPaperBets(): PaperBet[] {
       bets.push({
         id: idOf(fixture, call),
         fixtureId: fixture.id,
+        sport: fixture.sport,
         fixtureLabel: label(fixture),
         selection: call.selection,
         market: call.market,
@@ -103,6 +104,7 @@ export function getPaperBets(): PaperBet[] {
     bets.push({
       id: idOf(fixture, call),
       fixtureId: fixture.id,
+      sport: fixture.sport,
       fixtureLabel: label(fixture),
       selection: call.selection,
       market: call.market,

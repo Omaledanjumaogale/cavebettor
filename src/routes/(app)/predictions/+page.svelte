@@ -219,6 +219,7 @@
             {#each data.noValue as f}
               <a href={`/fixtures/${f.fixtureId}`} class="flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-[10px] transition hover:bg-white/[0.03]">
                 <CircleSlash size={10} class="shrink-0 text-fog-dim" />
+                <SportGlyph sport={f.sport} size="xs" />
                 <div class="min-w-0 flex-1">
                   <div class="truncate text-white/75">{f.home} vs {f.away}</div>
                   <div class="text-[9px] text-fog-dim">{f.league} · conf. {f.confidence}%</div>

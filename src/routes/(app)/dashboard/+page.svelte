@@ -104,7 +104,10 @@
           <a href={`/fixtures/${match.id}`} class="flex items-center justify-between gap-3 px-3.5 py-2.5 transition hover:bg-white/[0.03]">
             <div class="min-w-0">
               <div class="truncate text-[12px] font-medium text-white">{match.home} <span class="text-fog-dim">vs</span> {match.away}</div>
-              <div class="truncate text-[10.5px] text-fog-dim">{match.league}</div>
+              <div class="flex min-w-0 items-center gap-1.5">
+                <SportGlyph sport={match.sport} size="xs" />
+                <span class="truncate text-[10.5px] text-fog-dim">{match.league}</span>
+              </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <span class="num text-[13px] font-bold text-lime">{match.homeScore}–{match.awayScore}</span>

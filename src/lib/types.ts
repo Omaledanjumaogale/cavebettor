@@ -333,6 +333,7 @@ export interface ScrapeJob {
 export interface PaperBet {
   id: string;
   fixtureId: string;
+  sport: SportId;
   fixtureLabel: string;
   selection: string;
   market: string;

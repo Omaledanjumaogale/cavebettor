@@ -69,6 +69,7 @@ export const load: PageServerLoad = async ({ url }) => {
       return {
         fixtureId: f.id,
         kickoff: f.kickoff,
+        sport: f.sport,
         league: fixtureLeague(f).name,
         home: home.name,
         away: away.name,
@@ -109,6 +110,7 @@ export const load: PageServerLoad = async ({ url }) => {
     arbs,
     movers: getOddsMovers().map((m) => ({
       fixtureId: m.fixture.id,
+      sport: m.fixture.sport,
       league: fixtureLeague(m.fixture).name,
       home: resolveTeam(m.fixture.homeId, m.fixture.leagueId).name,
       away: resolveTeam(m.fixture.awayId, m.fixture.leagueId).name,

@@ -142,7 +142,13 @@
           <tbody>
             {#each data.movers as mover}
               <tr class="cursor-pointer" onclick={() => choose(mover.fixtureId)}>
-                <td><div class="text-[11.5px] font-medium text-white">{mover.home} vs {mover.away}</div><div class="text-[9.5px] text-fog-dim">{mover.league} · {formatKickoff(mover.kickoff)}</div></td>
+                <td>
+                  <div class="flex items-center gap-1.5">
+                    <SportGlyph sport={mover.sport} size="xs" />
+                    <div class="text-[11.5px] font-medium text-white">{mover.home} vs {mover.away}</div>
+                  </div>
+                  <div class="text-[9.5px] text-fog-dim">{mover.league} · {formatKickoff(mover.kickoff)}</div>
+                </td>
                 <td class="text-[11px] text-white/80">{mover.selection}</td>
                 <td class="num text-right text-[11.5px] font-semibold text-lime">{mover.odds.toFixed(2)}</td>
                 <td class={`num text-right text-[11.5px] font-semibold ${mover.drift >= 0 ? 'text-mint' : 'text-rose'}`}>{signed(mover.drift * 100)}%</td>
@@ -166,7 +172,10 @@
       {#each data.arbs as arb}
         <div class="panel p-4">
           <div class="flex items-center justify-between">
-            <div class="text-[12px] font-semibold text-white">{arb.home} vs {arb.away}</div>
+            <div class="flex min-w-0 items-center gap-1.5">
+              <SportGlyph sport={arb.sport} size="xs" />
+              <div class="truncate text-[12px] font-semibold text-white">{arb.home} vs {arb.away}</div>
+            </div>
             <span class={`chip ${arb.margin > 0 ? 'chip-mint' : 'chip-amber'} !text-[9px]`}>{arb.margin > 0 ? 'Arbitrage' : 'No arb'}</span>
           </div>
           <div class="mt-0.5 text-[9.5px] text-fog-dim">{arb.league} · {arb.market} · {formatKickoff(arb.kickoff)}</div>

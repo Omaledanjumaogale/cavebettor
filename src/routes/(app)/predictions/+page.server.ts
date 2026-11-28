@@ -128,6 +128,7 @@ export const load: PageServerLoad = async ({ url }) => {
       .map((f) => ({
         fixtureId: f.id,
         kickoff: f.kickoff,
+        sport: f.sport,
         league: fixtureLeague(f).name,
         home: resolveTeam(f.homeId, f.leagueId).name,
         away: resolveTeam(f.awayId, f.leagueId).name,

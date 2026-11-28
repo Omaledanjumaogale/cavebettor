@@ -2,6 +2,7 @@
   import { WalletCards, ArrowUpRight, Download, Filter, Clock, CheckCircle2, XCircle, Search, Plus, TrendingUp, ShieldCheck, Info } from '@lucide/svelte';
   import SectionHeader from '#lib/components/SectionHeader.svelte';
   import Sparkline from '#lib/components/Sparkline.svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
   import LineChart from '#lib/components/LineChart.svelte';
   import { fmtNgn, signed } from '#lib/engine/core';
   import { formatDate, relativeTime } from '#lib/format';
@@ -108,7 +109,13 @@
         <tbody>
           {#each shown as bet}
             <tr>
-              <td><div class="text-[10.5px] font-medium text-white/85">{bet.fixtureLabel}</div><div class="text-[9px] text-fog-dim">#{bet.fixtureId.slice(0, 8)}</div></td>
+              <td>
+                <div class="flex items-center gap-1.5">
+                  <SportGlyph sport={bet.sport} size="xs" />
+                  <div class="text-[10.5px] font-medium text-white/85">{bet.fixtureLabel}</div>
+                </div>
+                <div class="text-[9px] text-fog-dim">#{bet.fixtureId.slice(0, 8)}</div>
+              </td>
               <td><div class="text-[10.5px] text-white/80">{bet.selection}</div><div class="text-[9px] text-fog-dim">{bet.market}</div></td>
               <td class="num text-right text-[10.5px] font-semibold text-lime">{bet.odds.toFixed(2)}</td>
               <td class="num text-right text-[10px] text-fog">{(bet.modelProbability * 100).toFixed(0)}%</td>
