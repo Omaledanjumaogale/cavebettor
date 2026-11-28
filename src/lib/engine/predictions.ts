@@ -17,7 +17,9 @@ import type {
 } from '#lib/types';
 import {
   clamp,
+  confidenceFor,
   fairOdds,
+  hashString,
   jitter,
   kellyFraction,
   normalCdf,
@@ -682,7 +684,7 @@ function buildInsights(fixture: Fixture, core: CoreModel, markets: Market[], con
   insights.push({
     kind: 'model',
     title: `${valueCount} positive-EV selections across ${markets.length} markets`,
-    body: `The engine scanned ${markets.reduce((a, m) => a + m.outcomes.length, 0)} outcomes across ${BOOKMAKERS.length} bookmakers. ${valueCount} cleared the 2.5% edge threshold after removing the margin. ${league.name} pricing is ${valueCount > 4 ? 'loose' : 'reasonably sharp'} today.`,
+    body: `The engine scanned ${markets.reduce((a, m) => a + m.outcomes.length, 0)} outcomes across ${BOOKMAKERS.length} bookmakers. ${valueCount} cleared the 0.5% edge threshold after removing the margin. ${league.name} pricing is ${valueCount > 4 ? 'loose' : 'reasonably sharp'} today.`,
     impact: valueCount > 0 ? 'positive' : 'neutral',
     confidence: 80
   });
@@ -801,8 +803,15 @@ function periodKey(marketId: string): string {
   return 'full';
 }
 
+/**
+ * Price-aware pick score. A 90% shot at 1.14 is not better than a 78% shot
+ * at 1.32: once the stake is settled the second bet returns more and still
+ * wins four times in five. The price factor deliberately discounts sub-1.20
+ * quotes, which is what made every football board a copy of over 1.5.
+ */
 function scoreOf(row: Candidate): number {
-  return row.modelProbability * 1000 + row.edge * 100;
+  const priceFactor = clamp((row.odds - 1.05) / 0.3, 0.08, 1);
+  return row.modelProbability * (0.55 + 0.45 * priceFactor) + row.edge * 0.4;
 }
 
 /** "1st half", "first half" and "h1" must collapse to one scope. */
@@ -854,12 +863,15 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
   //   safety — a fair-or-better price on a high strike rate. A 90% shot at a
   //            fair 1.14 is a better bet to win than a 49% shot at 2.10, and
   //            the board must say so instead of hiding behind a price floor.
-  const valueRows = all.filter((row) => row.edge >= 0.02 && row.odds >= 1.2 && row.odds <= 6);
+  const valueRows = all.filter((row) => row.edge >= 0.01 && row.odds >= 1.18 && row.odds <= 7);
   const seenRow = new Set(valueRows.map((row) => `${row.marketId}|${row.selection}`));
+  // The ranked board answers "what is most likely to win?", not only "where
+  // is the price wrong?". A fair-priced 73% double chance is still a useful
+  // projection; the value table filters to positive edges separately.
   const safetyRows = all.filter(
     (row) =>
-      row.modelProbability >= 0.66 &&
-      row.edge >= 0.005 &&
+      row.modelProbability >= 0.58 &&
+      row.edge >= -0.03 &&
       row.odds >= 1.1 &&
       !seenRow.has(`${row.marketId}|${row.selection}`)
   );
@@ -871,7 +883,7 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
   const informative = (row: Candidate) => {
     const totals = readTotals(row);
     if (!totals) return true;
-    return row.modelProbability >= 0.66 && row.modelProbability <= 0.92;
+    return row.modelProbability >= 0.60 && row.modelProbability <= 0.94;
   };
 
   // ── totals: best line per scope and direction, then compatibility ────────
@@ -906,7 +918,12 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
   }
 
   // ── straight win versus the cover that actually settles ─────────────────
-  const straight = others.find((row) => row.marketId === '1x2' || row.marketId === 'ml');
+  // The best side of the main market, not whichever side happened to be
+  // listed first: the old `find` always took the home team, even when the
+  // away side was the actual favourite.
+  const straight = others
+    .filter((row) => row.marketId === '1x2' || row.marketId === 'ml')
+    .sort((a, b) => b.modelProbability - a.modelProbability)[0];
   const covers = others.filter((row) => row.marketId === 'dc' || row.marketId === 'dnb');
   const handicaps = others.filter((row) => /^(ah|spread|puck|runline|sethcp)/.test(row.marketId));
   const keep: Candidate[] = [];
@@ -919,7 +936,7 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
   }
 
   const usedFamilies = new Set<string>();
-  for (const row of [...covers, ...handicaps]) {
+  for (const row of [...covers, ...handicaps].sort((a, b) => scoreOf(b) - scoreOf(a))) {
     if (keep.some((k) => k.marketId === row.marketId && k.selection === row.selection)) continue;
     const family = /^(ah|spread|puck|runline|sethcp)/.test(row.marketId) ? 'handicap' : 'cover';
     const key = `${family}|${periodKey(row.marketId)}`;
@@ -964,28 +981,81 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
     .filter((row) => {
       const key = periodKey(row.marketId);
       const count = perPeriod.get(key) ?? 0;
-      if (count >= 2) return false;
+      // Full-match legs can coexist (a result and a total describe different
+      // parts of the same match); period legs are correlated and stay capped.
+      if (count >= (key === 'full' ? 5 : 2)) return false;
       perPeriod.set(key, count + 1);
       return true;
     });
 
-  // Nothing below a 64% strike rate is published as a pick: the board exists
-  // to project winners, not to fill space. The edge floor is 1% because the
-  // bookmaker jitter is ±4.5% — anything under that is noise, not a signal.
-  // The screening layer adds the two rules that keep a board honest: a cap on
-  // the edge (a 40% "edge" is a stale price, not free money) and a 15-point
-  // cap on the model-versus-market gap (beyond that they describe different
-  // matches). Push-capable lines are discounted first.
-  return balanced
-    .filter((row) =>
-      screenSelection({
+  // Nothing below a 58% strike rate is published as a pick. The old 64% floor
+  // left tennis, hockey and baseball fixtures with no call at all, which is a
+  // worse failure than an honest 60% pick. The edge floor stays tiny because
+  // the bookmaker jitter is ±4.5%; the screening layer adds the cap on stale
+  // edges and the 15-point model-versus-market gap, and discounts pushes.
+  const screened = balanced.filter((row) =>
+    screenSelection(
+      {
         marketId: row.marketId,
         selection: row.selection,
         probability: row.modelProbability,
         odds: row.odds
-      }).pass
-    )
-    .slice(0, 10);
+      },
+      { minStrike: 0.58, minEdge: -0.03 }
+    ).pass
+  );
+  if (!screened.length) return [];
+
+  // Sub-1.20 totals are technically winners but they are the same bet on
+  // almost every football fixture. Keep them off the published board unless
+  // there is genuinely nothing else, and never make one the headline call.
+  const publishable = screened.filter((row) => {
+    const totals = readTotals(row);
+    if (!totals) return true;
+    if (row.odds < 1.2) return false;
+    // 'Over 1.5' is the same near-certain bet on almost every football
+    // fixture; it belongs in the supporting table, never in the headline pool.
+    if (totals.scope === 'match' && totals.line <= 1.5) return false;
+    return true;
+  });
+  const board = publishable.length ? publishable : screened;
+  // Headline calls are full-match markets. Period handicaps and first-half
+  // totals are useful supporting legs, but a board whose lead story is a
+  // first-half +0.5 on every fixture is not describing different matches.
+  const fullMatch = board.filter((row) => periodKey(row.marketId) === 'full');
+  const primaryPool = (fullMatch.length ? fullMatch : board).filter(
+    (row) => row.odds >= 1.2 && row.modelProbability >= 0.60
+  );
+  const pool = primaryPool.length ? primaryPool : board;
+
+  // Headline diversity: the best pick from each market family, then rotate
+  // deterministically among those within 15% of the top score. The fixture
+  // id holds the choice still across refreshes while preventing a whole day
+  // of football from reading 'over 1.5'.
+  const familyOf = (row: Candidate) => {
+    if (row.marketId === '1x2' || row.marketId === 'ml') return 'straight';
+    if (row.marketId === 'dc' || row.marketId === 'dnb') return row.marketId;
+    if (row.marketId === 'btts') return 'btts';
+    if (/^teamtotal/.test(row.marketId)) return 'team-total';
+    if (/^(ah|spread|puck|runline|sethcp)/.test(row.marketId)) return 'handicap';
+    const totals = readTotals(row);
+    if (totals) return `totals-${totals.scope}`;
+    return row.marketId;
+  };
+  const byFamily = new Map<string, Candidate>();
+  for (const row of pool) {
+    const key = familyOf(row);
+    const incumbent = byFamily.get(key);
+    if (!incumbent || scoreOf(row) > scoreOf(incumbent)) byFamily.set(key, row);
+  }
+  const ranked = [...byFamily.values()].sort((a, b) => scoreOf(b) - scoreOf(a));
+  const best = scoreOf(ranked[0]);
+  const finalists = ranked.filter((row) => scoreOf(row) >= best * 0.85);
+  const anchor = finalists[hashString(fixture.id + 'anchor') % finalists.length];
+  const rest = board
+    .filter((row) => row !== anchor)
+    .sort((a, b) => b.modelProbability - a.modelProbability || b.edge - a.edge);
+  return [anchor, ...rest].slice(0, 8);
 }
 
 function buildRecommendations(valueBets: ValueBet[], markets: Market[], fixture: Fixture): Recommendation[] {
@@ -1009,7 +1079,7 @@ function buildRecommendations(valueBets: ValueBet[], markets: Market[], fixture:
       rationale:
         `${(row.modelProbability * 100).toFixed(1)}% model strike rate against ${row.odds.toFixed(2)} at ${row.bookmaker} - ` +
         `${(row.edge * 100).toFixed(1)}% above the implied price.` +
-        (index === 0 ? ' Highest-confidence call on this fixture.' : ''),
+        (index === 0 ? ' Headline call: best blend of strike rate and price on this fixture.' : ''),
       risk: (row.modelProbability > 0.65 ? 'low' : row.modelProbability > 0.45 ? 'medium' : 'high') as 'low' | 'medium' | 'high'
     }));
   }
@@ -1037,7 +1107,7 @@ function buildRecommendation(valueBets: ValueBet[], markets: Market[], fixture: 
       edge: best.edge,
       stakeNgn: best.stakeNgn,
       confidence: best.confidence,
-      rationale: `Highest-confidence call: ${(best.modelProbability * 100).toFixed(1)}% model strike rate at ${best.odds.toFixed(2)} with ${best.bookmaker}, ${(best.edge * 100).toFixed(1)}% above the implied price. Quarter-Kelly sizing on a ₦1.25m paper bankroll.`,
+      rationale: `Headline call: ${(best.modelProbability * 100).toFixed(1)}% model strike rate at ${best.odds.toFixed(2)} with ${best.bookmaker}, ${(best.edge * 100).toFixed(1)}% above the implied price. Quarter-Kelly sizing on a ₦1.25m paper bankroll.`,
       risk: best.modelProbability > 0.6 ? 'low' : best.modelProbability > 0.4 ? 'medium' : 'high'
     };
   }
@@ -1113,20 +1183,47 @@ function buildMetrics(fixture: Fixture, core: CoreModel): AnalysisMetric[] {
 
 /* ── Public API ──────────────────────────────────────────────────────────── */
 
-export function buildPrediction(fixture: Fixture): Prediction {
-  const core = coreFor(fixture);
-  const markets = buildMarkets(fixture, core);
-  const components = buildComponents(fixture, core);
+/**
+ * The fixture as it stood at kick-off.
+ *
+ * Every published number - probabilities, markets, ranked picks, confidence -
+ * is computed from this view, so a live score or a full-time result can never
+ * rewrite the card the user was shown before the whistle. Live re-pricing
+ * still exists (`getLivePrediction`), but it is a separate, explicitly in-play
+ * view and never feeds the ledger.
+ */
+function preMatchFixture(fixture: Fixture): Fixture {
+  if (fixture.status === 'scheduled') return fixture;
+  return {
+    ...fixture,
+    status: 'scheduled',
+    minute: undefined,
+    period: undefined,
+    score: { home: 0, away: 0 },
+    periods: undefined,
+    stats: undefined,
+    finishedAt: undefined
+  };
+}
+
+function predict(fixture: Fixture, live: boolean): Prediction {
+  const model = live ? fixture : preMatchFixture(fixture);
+  const core = coreFor(model);
+  const markets = buildMarkets(model, core);
+  const components = buildComponents(model, core);
   const dataQuality = round(clamp(0.87 + jitter(fixture.id + 'dq', 0.05), 0.72, 0.99), 3);
 
-  const probs = [core.home, core.draw, core.away].filter((p) => p > 0.001);
-  const entropy = -probs.reduce((a, p) => a + p * Math.log(p), 0) / Math.log(Math.max(2, probs.length));
   const topEdge = Math.max(0, ...markets.flatMap((m) => m.outcomes.map((o) => o.edge)));
-  const confidence = Math.round(clamp(58 + (1 - entropy) * 24 + dataQuality * 8 + Math.min(10, topEdge * 120), 45, 96));
-  const recommendations = buildRecommendations([], markets, fixture);
+  const recommendations = buildRecommendations([], markets, model);
   const valueBets = valueBetsFromRecommendations(recommendations, markets);
-  const recommendation = recommendations[0] ?? buildRecommendation(valueBets, markets, fixture);
-  const insights = buildInsights(fixture, core, markets, confidence);
+  const recommendation = recommendations[0] ?? buildRecommendation(valueBets, markets, model);
+  // Confidence describes the published call, not the match: the recommended
+  // selection's own settlement probability, adjusted for data quality and
+  // agreement with the price. With no published call the best available side
+  // is used, which is why some fixtures honestly sit below 70.
+  const bestProb = Math.max(core.home, core.away, core.draw);
+  const confidence = recommendations[0]?.confidence ?? confidenceFor(bestProb, fairOdds(bestProb), dataQuality);
+  const insights = buildInsights(model, core, markets, confidence);
   const profile = sportProfile(fixture.sport);
 
   return {
@@ -1136,7 +1233,7 @@ export function buildPrediction(fixture: Fixture): Prediction {
     marketContext: profile.backtest.settlement,
     modelLabel: profile.backtest.model,
     settlement: profile.backtest.settlement,
-    metrics: buildMetrics(fixture, core),
+    metrics: buildMetrics(model, core),
     generatedAt: new Date().toISOString(),
     modelVersion: 'CaveBettor Ensemble v7.3',
     ensembleVersion: '2026.02.1',
@@ -1177,21 +1274,41 @@ export function buildPrediction(fixture: Fixture): Prediction {
   };
 }
 
+export function buildPrediction(fixture: Fixture): Prediction {
+  return predict(fixture, false);
+}
+
 const predictionCache = new Map<string, Prediction>();
 
-export function getPrediction(fixture: Fixture): Prediction {
-  const key = `${fixture.id}:${fixture.status}:${fixture.score.home}:${fixture.score.away}:${fixture.minute ?? 0}`;
-  const hit = predictionCache.get(key);
-  if (hit) return hit;
-  const prediction = buildPrediction(fixture);
+function cachePrediction(key: string, prediction: Prediction): Prediction {
   // Keep the projected scoreline internally consistent: the total must always
   // equal home + away after display rounding.
   const home = round(prediction.expectedGoals.home, 2);
   const away = round(prediction.expectedGoals.away, 2);
   prediction.expectedGoals = { home, away, total: round(home + away, 2) };
-  if (predictionCache.size > 240) predictionCache.clear();
+  if (predictionCache.size > 480) predictionCache.clear();
   predictionCache.set(key, prediction);
   return prediction;
+}
+
+export function getPrediction(fixture: Fixture): Prediction {
+  const key = `pre:${fixture.id}`;
+  const hit = predictionCache.get(key);
+  if (hit) return hit;
+  return cachePrediction(key, buildPrediction(fixture));
+}
+
+/**
+ * Explicitly in-play repricing for the live desk. Never use this for the
+ * ranked board, the shortlist, the ledger or any historical grading: those
+ * must keep the kick-off call.
+ */
+export function getLivePrediction(fixture: Fixture): Prediction {
+  if (fixture.status !== 'live' && fixture.status !== 'halftime') return getPrediction(fixture);
+  const key = `live:${fixture.id}:${fixture.score.home}:${fixture.score.away}:${fixture.minute ?? 0}`;
+  const hit = predictionCache.get(key);
+  if (hit) return hit;
+  return cachePrediction(key, predict(fixture, true));
 }
 
 export function modelById(id: string) {
@@ -1226,5 +1343,7 @@ function valueBetsFromRecommendations(recommendations: Recommendation[], markets
         bookmaker: outcome?.bestBook ?? ''
       } satisfies ValueBet;
     })
-    .filter((bet) => bet.marketId);
+    // Only a genuine price edge belongs in the value table. The ranked board
+    // can carry fair-priced projections; the staking table must not.
+    .filter((bet) => bet.marketId && bet.edge >= 0.005);
 }

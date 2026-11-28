@@ -7,8 +7,8 @@ describe('paper ledger', () => {
   it('records only calls the board would publish', () => {
     expect(bets.length).toBeGreaterThan(0);
     for (const bet of bets) {
-      expect(bet.modelProbability).toBeGreaterThanOrEqual(0.64);
-      expect(bet.edge).toBeGreaterThanOrEqual(0.01);
+      expect(bet.modelProbability).toBeGreaterThanOrEqual(0.58);
+      expect(bet.edge).toBeGreaterThanOrEqual(0.005);
       expect(bet.odds).toBeGreaterThan(1);
       expect(bet.stakeNgn).toBeGreaterThanOrEqual(1000);
       expect(bet.stakeNgn).toBeLessThanOrEqual(50_000);

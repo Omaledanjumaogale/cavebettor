@@ -59,7 +59,7 @@ export const SPORT_DASHBOARDS: SportDashboardDef[] = [
       { id: 'fixtures', label: 'Fixtures', hint: 'Matches in the football universe', tone: 'lime' },
       { id: 'live', label: 'Live now', hint: 'Matches in progress', tone: 'mint' },
       { id: 'confidence', label: 'Avg confidence', hint: 'Mean ensemble confidence', tone: 'sky' },
-      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 2.5% edge threshold', tone: 'amber' },
+      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 0.5% edge threshold', tone: 'amber' },
       { id: 'edge', label: 'Best edge', hint: 'Largest positive edge available', tone: 'mint' },
       { id: 'markets', label: 'Markets priced', hint: 'Distinct football markets on the board', tone: 'sky' }
     ],
@@ -116,7 +116,7 @@ export const SPORT_DASHBOARDS: SportDashboardDef[] = [
       { id: 'fixtures', label: 'Fixtures', hint: 'Matches in the basketball universe', tone: 'lime' },
       { id: 'live', label: 'Live now', hint: 'Matches in progress', tone: 'mint' },
       { id: 'confidence', label: 'Avg confidence', hint: 'Mean ensemble confidence', tone: 'sky' },
-      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 2.5% edge threshold', tone: 'amber' },
+      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 0.5% edge threshold', tone: 'amber' },
       { id: 'edge', label: 'Best edge', hint: 'Largest positive edge available', tone: 'mint' },
       { id: 'markets', label: 'Markets priced', hint: 'Distinct basketball markets on the board', tone: 'sky' }
     ],
@@ -222,7 +222,7 @@ export const SPORT_DASHBOARDS: SportDashboardDef[] = [
       { id: 'fixtures', label: 'Fixtures', hint: 'Games in the hockey universe', tone: 'lime' },
       { id: 'live', label: 'Live now', hint: 'Games in progress', tone: 'mint' },
       { id: 'confidence', label: 'Avg confidence', hint: 'Mean ensemble confidence', tone: 'sky' },
-      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 2.5% edge threshold', tone: 'amber' },
+      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 0.5% edge threshold', tone: 'amber' },
       { id: 'edge', label: 'Best edge', hint: 'Largest positive edge available', tone: 'mint' },
       { id: 'markets', label: 'Markets priced', hint: 'Distinct hockey markets on the board', tone: 'sky' }
     ],
@@ -275,7 +275,7 @@ export const SPORT_DASHBOARDS: SportDashboardDef[] = [
       { id: 'fixtures', label: 'Fixtures', hint: 'Games in the baseball universe', tone: 'lime' },
       { id: 'live', label: 'Live now', hint: 'Games in progress', tone: 'mint' },
       { id: 'confidence', label: 'Avg confidence', hint: 'Mean ensemble confidence', tone: 'sky' },
-      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 2.5% edge threshold', tone: 'amber' },
+      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 0.5% edge threshold', tone: 'amber' },
       { id: 'edge', label: 'Best edge', hint: 'Largest positive edge available', tone: 'mint' },
       { id: 'markets', label: 'Markets priced', hint: 'Distinct baseball markets on the board', tone: 'sky' }
     ],
@@ -328,7 +328,7 @@ export const SPORT_DASHBOARDS: SportDashboardDef[] = [
       { id: 'fixtures', label: 'Fixtures', hint: 'Matches in the tennis universe', tone: 'lime' },
       { id: 'live', label: 'Live now', hint: 'Matches in progress', tone: 'mint' },
       { id: 'confidence', label: 'Avg confidence', hint: 'Mean ensemble confidence', tone: 'sky' },
-      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 2.5% edge threshold', tone: 'amber' },
+      { id: 'value', label: 'Value picks', hint: 'Selections clearing the 0.5% edge threshold', tone: 'amber' },
       { id: 'edge', label: 'Best edge', hint: 'Largest positive edge available', tone: 'mint' },
       { id: 'markets', label: 'Markets priced', hint: 'Distinct tennis markets on the board', tone: 'sky' }
     ],

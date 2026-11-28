@@ -6,7 +6,6 @@ import { getPrediction } from '#lib/engine/predictions';
 import { round } from '#lib/engine/core';
 import { mergedFixtures } from '#lib/server/feed';
 import { nextUp, sortBySchedule, sortRowsBySchedule } from '#lib/schedule';
-import { liveCards, liveFixtures } from '#lib/server/live';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -14,7 +13,7 @@ export const load: PageServerLoad = async ({ params }) => {
   const def = SPORT_DASHBOARD_MAP[params.sport];
   if (!def) error(404, 'That sport desk does not exist.');
 
-  const [feed, live, cards] = await Promise.all([mergedFixtures(), liveFixtures(), liveCards()]);
+  const feed = await mergedFixtures();
 
   // The provider feed wins when it carries the sport's competitions; the local
   // engine covers everything else. Both never cost a paid request here.
@@ -23,13 +22,7 @@ export const load: PageServerLoad = async ({ params }) => {
   // The desk reads as a timetable: the next kick-off first, later ones below.
   const source = sortBySchedule(providerFixtures.length ? providerFixtures : engineFixtures);
 
-  const cardFor = (fixture: (typeof source)[number]) => {
-    const full = getPrediction(fixture);
-    // The cached card keeps the payload small; the full model is needed for
-    // the sport-appropriate stat board, so it is used when available.
-    const cached = cards?.[fixture.id];
-    return cached && (cached as { metrics?: unknown[] }).metrics?.length ? (cached as typeof full) : full;
-  };
+  const cardFor = (fixture: (typeof source)[number]) => getPrediction(fixture);
 
   const rows = source.map((fixture) => {
     const card = cardFor(fixture);

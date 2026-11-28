@@ -1,7 +1,7 @@
 import { BOOKMAKERS } from '#lib/data/catalog';
 import { awayTeam, fixtureLeague, homeTeam } from '#lib/data/registry';
 import type { Fixture, Market, MarketGroup, MarketOutcome, ScoreCell } from '#lib/types';
-import { clamp, fairOdds, jitter, kellyFraction, normalCdf, normalQuantile, round } from './core';
+import { clamp, confidenceFor, fairOdds, jitter, kellyFraction, normalCdf, normalQuantile, round } from './core';
 import { scoringProfile } from './scoring';
 
 interface PeriodModel {
@@ -51,14 +51,18 @@ function priceOutcome(fixture: Fixture, spec: OutcomeSpec, marketId: string, ind
   const best = books.reduce((a, b) => (b.odds > a.odds ? b : a));
   // A displayed edge above ~35% is a state mismatch, not a market mistake.
   const edge = clamp(p * best.odds - 1, -1, 0.35);
+  // Confidence is the price's own settlement probability with quality and
+  // agreement adjustments - never the match entropy, which saturates at 1.0
+  // once a live score is known and made finished games look 80%+ certain.
+  const dataQuality = 0.87 + jitter(fixture.id + 'dq', 0.05);
   return {
     id: `${marketId}-${index}`, label: spec.label, shortLabel: spec.shortLabel,
     modelProbability: round(p, 4), fairOdds: fairOdds(p), bookOdds: best.odds,
     prior: spec.prior === undefined ? undefined : round(spec.prior, 4),
     bestBook: best.book.name, edge: round(edge, 4), kelly: round(kellyFraction(p, best.odds), 4),
     trend: round(jitter(`${marketId}-${spec.label}-trend`, 0.055), 3),
-    confidence: Math.round(clamp(58 + p * 18 + Math.min(20, Math.max(0, edge) * 220), 40, 96)),
-    value: edge > 0.025 && p > 0.08
+    confidence: confidenceFor(p, best.odds, dataQuality),
+    value: edge > 0.005 && p > 0.08
   };
 }
 

@@ -15,8 +15,8 @@ CaveBettor is an enterprise-grade prediction, odds-intelligence and bankroll-ana
 | **Command centre** | Live KPIs, bankroll curve, model health, market movers, pipeline health, league coverage, analyst briefing |
 | **Fixtures** | 20 competitions, 5 sports, date grouping, sport/league/status/value filters, a sport glyph on every fixture, live kick-off countdowns, card and table views |
 | **Match lab** | Probability split, value table, correct-score heatmap, totals, top scorelines, model decomposition, H2H, lineups, live stats, LLM analyst |
-| **Live centre** | In-play re-pricing every 30 seconds, live edges, probability drift, recent results, upcoming strip |
-| **Value board** | Every selection above the 2.5% edge threshold, ranked, with quarter-Kelly stakes and a three-leg accumulator idea |
+| **Live centre** | Kickoff-frozen calls beside the live score, live edges, probability drift, recent results, upcoming strip |
+| **Model board** | Every fixture in the window gets a frozen headline call; a value toggle shows selections above the 0.5% edge, ranked, with quarter-Kelly stakes and a three-leg accumulator idea |
 | **Odds & markets** | Eight-bookmaker comparison, movement radar, arbitrage scan |
 | **Model lab** | Production/shadow registry, accuracy, log-loss, Brier, ROI, drift, calibration, feature importance, walk-forward training runs, one-click retraining |
 | **Data pipeline** | 32 harmonised sources, health, coverage, latency, reliability, job history, permission-aware collection, API-key slots, schedules |
@@ -37,9 +37,13 @@ CaveBettor is an enterprise-grade prediction, odds-intelligence and bankroll-ana
 
 Interval markets (first half, periods, quarters, sets) are quoted before kick-off only. Once the clock starts the board prices the match, never an interval whose result the scoreboard has already settled.
 
+### Published prediction contract
+
+Every card is built for kickoff and cached by fixture id. The probability split, ranked selections, headline market and confidence are published once and do not move at half-time or after the final whistle. Settlement grades that printed call, so the paper ledger measures the product rather than hindsight. Confidence follows the selected pick's own strike rate against its price, data quality and distance from fair odds: a 63% pick reads in the low 60s, an 82% pick in the low 80s, and fixtures no longer collapse into a 70–78 default.
+
 ### Fixture calendar and score board
 
-Fixtures are generated from a fixed UTC calendar: every competition plays two matches a day in one of twelve two-hour kick-off slots, and each fixture's seed is its league, teams and **kick-off timestamp**. A match therefore keeps its id, its score script and its final score for as long as it is in the 96-hour window — refreshing the board an hour later shows the same match further along, never a new match with a new result.
+Fixtures are generated from a fixed UTC calendar: every competition plays a full matchday — every team in the catalogue is paired once per day in a rotating round-robin, spread across twelve two-hour kick-off slots. No league is truncated to a sample of two matches. Each fixture's seed is its league, teams and **kick-off timestamp**, so a match keeps its id, its score script and its final score for as long as it is in the 96-hour window — refreshing the board an hour later shows the same match further along, never a new match with a new result. When the provider feed is live, its complete daily schedule (every league, cup and tournament the provider returns) replaces the local calendar and is projected in full.
 
 The final score is sampled from the same distribution the model prices (Poisson for football and hockey, a rounded normal for basketball and baseball, a best-of-three set script for tennis), then dealt across the periods as a monotonic timeline. A match that finishes 3–1 keeps 3–1 on every surface, and its half-time or quarter line always adds up to that final.
 
@@ -346,7 +350,7 @@ Everything is deterministic for a given fixture and timestamp, so the browser, t
 | Plan | Price | Notes |
 | --- | --- | --- |
 | Starter | Free | Public probabilities, 3 leagues, basic odds, paper bankroll |
-| **Pro** | **₦5,000 / month** | **All sports, leagues, 84 markets, live probabilities, model lab, pipeline, LLM analyst, 25k API calls** |
+| **Pro** | **₦5,000 / month** | **All sports, leagues, 84 markets, frozen pre-match probabilities, model lab, pipeline, LLM analyst, 25k API calls** |
 | Trading Desk | ₦5,000 / seat / month | Up to 5 seats, shared notes, webhooks, role-based access |
 
 Checkout is Paystack-ready. Without a secret key the endpoint returns a labelled demo response and never contacts a provider.

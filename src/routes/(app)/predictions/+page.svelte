@@ -7,35 +7,50 @@
   import AddToBetslip from '#lib/components/AddToBetslip.svelte';
   import SportGlyph from '#lib/components/SportGlyph.svelte';
   import KickoffClock from '#lib/components/KickoffClock.svelte';
-  import { fmtNgn, signed, pct } from '#lib/engine/core';
+  import { fmtNgn, signed } from '#lib/engine/core';
   import { formatKickoff } from '#lib/format';
 
   let { data } = $props();
 
   function update(patch: Record<string, string>) {
-    const params = new URLSearchParams({ sport: data.filters.sport, sort: data.filters.sort, ...patch });
+    const params = new URLSearchParams({ sport: data.filters.sport, sort: data.filters.sort, mode: data.filters.mode, ...patch });
     for (const [k, v] of [...params.entries()]) if (!v || v === 'all') params.delete(k);
     goto(`/predictions${params.size ? `?${params}` : ''}`, { keepFocus: true, noScroll: true });
   }
 
-  const top = $derived(data.bets.slice(0, 3));
-  const rest = $derived(data.bets.slice(3));
+  const top = $derived(data.page === 1 ? data.bets.slice(0, 3) : []);
+  const isAll = $derived(data.filters.mode === 'all');
+  const kpis = $derived([
+    { label: isAll ? 'Projected fixtures' : 'Positive edges', value: String(data.summary.count), sub: isAll ? 'one frozen call each' : 'after margin', colour: '#c9ff4d' },
+    { label: 'Average edge', value: `${signed(data.summary.avgEdge * 100)}%`, sub: isAll ? 'value and no-value' : 'per selection', colour: '#35e7a1' },
+    { label: 'Best edge', value: `${signed(data.summary.bestEdge * 100)}%`, sub: 'highest on board', colour: '#f6c453' },
+    { label: 'Mean confidence', value: `${data.summary.avgConfidence}%`, sub: 'selected call', colour: '#6fc9ff' },
+    { label: 'Suggested exposure', value: fmtNgn(data.summary.exposure, { compact: true }), sub: 'staked value calls', colour: '#a99bff' }
+  ]);
   let sort = $state(untrack(() => data.filters.sort));
 </script>
 
-<svelte:head><title>Value board — CaveBettor</title></svelte:head>
+<svelte:head><title>Model board — CaveBettor</title></svelte:head>
 
 <div class="space-y-4">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <div class="mb-1 flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-lime"><Sparkles size={12} /> Value board</div>
-      <h1 class="display text-[22px] font-bold tracking-tight text-white sm:text-[26px]">Model edge, ranked.</h1>
+      <div class="mb-1 flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-lime"><Sparkles size={12} /> {isAll ? 'Model board' : 'Value board'}</div>
+      <h1 class="display text-[22px] font-bold tracking-tight text-white sm:text-[26px]">{isAll ? 'Every fixture, projected.' : 'Model edge, ranked.'}</h1>
       <p class="mt-1 max-w-2xl text-[12.5px] text-fog">
-        Every selection whose model probability beats the de-vigged market price by at least 2.5%. {data.summary.count} edges across {data.summary.fixtures} fixtures.
+        {#if isAll}
+          The frozen pre-match call for all {data.total} fixtures in the window. Value tags mark calls whose price also clears the 0.5% edge; page {data.page} of {data.pageCount}.
+        {:else}
+          Every selection whose model probability beats the de-vigged market price. {data.total} edges across {data.summary.fixtures} fixtures, page {data.page} of {data.pageCount}.
+        {/if}
       </p>
     </div>
-    <div class="flex w-full items-center gap-2 sm:w-auto">
-      <select class="input !w-auto !py-2 text-[11.5px]" bind:value={sort} onchange={() => update({ sort })} aria-label="Sort value bets">
+    <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+      <div class="inline-flex rounded-lg border border-white/[0.08] bg-black/20 p-0.5">
+        <button onclick={() => update({ mode: 'all' })} class={`rounded-md px-2.5 py-1.5 text-[10.5px] font-semibold transition ${isAll ? 'bg-lime/15 text-lime' : 'text-fog hover:text-white'}`}>All projections</button>
+        <button onclick={() => update({ mode: 'value' })} class={`rounded-md px-2.5 py-1.5 text-[10.5px] font-semibold transition ${!isAll ? 'bg-lime/15 text-lime' : 'text-fog hover:text-white'}`}>Value only</button>
+      </div>
+      <select class="input !w-auto !py-2 text-[11.5px]" bind:value={sort} onchange={() => update({ sort })} aria-label="Sort model calls">
         <option value="probability">Sort: model probability</option>
         <option value="edge">Sort: model edge</option>
         <option value="confidence">Sort: confidence</option>
@@ -47,13 +62,7 @@
   </div>
 
   <div class="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-5">
-    {#each [
-      { label: 'Positive edges', value: String(data.summary.count), sub: 'after margin', colour: '#c9ff4d' },
-      { label: 'Average edge', value: `+${(data.summary.avgEdge * 100).toFixed(1)}%`, sub: 'per selection', colour: '#35e7a1' },
-      { label: 'Best edge', value: `+${(data.summary.bestEdge * 100).toFixed(1)}%`, sub: 'highest on board', colour: '#f6c453' },
-      { label: 'Mean confidence', value: `${data.summary.avgConfidence}%`, sub: 'ensemble agreement', colour: '#6fc9ff' },
-      { label: 'Suggested exposure', value: fmtNgn(data.summary.exposure, { compact: true }), sub: 'quarter-Kelly sum', colour: '#a99bff' }
-    ] as kpi}
+    {#each kpis as kpi}
       <div class="panel p-3.5">
         <div class="stat-label">{kpi.label}</div>
         <div class="display num mt-1.5 text-[18px] font-bold sm:text-[21px]" style={`color:${kpi.colour}`}>{kpi.value}</div>
@@ -74,10 +83,11 @@
   {#if data.bets.length === 0}
     <div class="panel flex flex-col items-center justify-center py-16 text-center">
       <CircleSlash size={28} class="text-fog-dim" />
-      <h3 class="mt-3 text-[15px] font-semibold text-white">No value in this sport right now</h3>
-      <p class="mt-1 max-w-md text-[12px] text-fog">The market is pricing these fixtures efficiently. Check another sport or come back after the next odds refresh.</p>
+      <h3 class="mt-3 text-[15px] font-semibold text-white">{isAll ? 'No fixtures in this window' : 'No value in this sport right now'}</h3>
+      <p class="mt-1 max-w-md text-[12px] text-fog">{isAll ? 'Every fixture inside the published horizon is projected. Widen the window or check another sport.' : 'The market is pricing these fixtures efficiently. Check another sport or come back after the next odds refresh.'}</p>
     </div>
   {:else}
+    {#if top.length}
     <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
       {#each top as bet, i}
         <a href={`/fixtures/${bet.fixtureId}`} class="panel panel-hover relative overflow-hidden p-4">
@@ -100,24 +110,25 @@
               </div>
               <div class="text-right">
                 <div class="stat-label">Model edge</div>
-                <div class="num text-[18px] font-bold text-mint">+{(bet.edge * 100).toFixed(1)}%</div>
+                <div class={`num text-[18px] font-bold ${bet.edge >= 0 ? 'text-mint' : 'text-rose'}`}>{signed(bet.edge * 100)}%</div>
               </div>
               <ConfidenceMeter value={bet.confidence} size="md" showLabel={false} />
             </div>
             <div class="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-2.5 text-[10px]">
-              <span class="text-fog">Stake {fmtNgn(bet.stakeNgn)}</span>
+              <span class="text-fog">{bet.isValue ? `Value · stake ${fmtNgn(bet.stakeNgn)}` : 'Model call · no stake'}</span>
               <span class="flex items-center gap-1 font-semibold text-lime">Analysis <ChevronRight size={11} /></span>
             </div>
           </div>
         </a>
       {/each}
     </div>
+    {/if}
 
     <div class="grid gap-4 xl:grid-cols-3">
       <div class="panel overflow-hidden xl:col-span-2">
         <div class="flex items-center justify-between px-4 pb-1 pt-4">
-          <SectionHeader title="All ranked selections" description="Model probability versus best de-vigged price" eyebrow="The board" />
-          <span class="chip !text-[9px]">{data.bets.length} rows</span>
+          <SectionHeader title={isAll ? 'Every fixture, one frozen call' : 'All ranked selections'} description={isAll ? 'Headline model projection, with value calls tagged' : 'Model probability versus best de-vigged price'} eyebrow="The board" />
+          <span class="chip !text-[9px]">{data.shownFrom}–{data.shownTo} of {data.total}</span>
         </div>
         <div class="table-wrap">
           <table class="data-table">
@@ -137,13 +148,16 @@
                       </div>
                     </div>
                   </td>
-                  <td class="max-w-[170px]">
-                    <div class="truncate text-[11px] font-medium text-white/85">{bet.selection}</div>
+                  <td class="max-w-[190px]">
+                    <div class="flex items-center gap-1.5">
+                      <span class="truncate text-[11px] font-medium text-white/85">{bet.selection}</span>
+                      {#if bet.isValue}<span class="chip shrink-0 !border-lime/30 !bg-lime/10 !px-1.5 !py-0 !text-[8px] !text-lime">Value</span>{/if}
+                    </div>
                     <div class="truncate text-[9px] text-fog-dim">{bet.market}</div>
                   </td>
                   <td class="num text-right text-[11px]">{(bet.modelProbability * 100).toFixed(1)}%</td>
                   <td class="num text-right text-[11.5px] font-semibold text-lime">{bet.odds.toFixed(2)}</td>
-                  <td class="num text-right text-[11px] font-bold text-mint">+{(bet.edge * 100).toFixed(1)}%</td>
+                  <td class={`num text-right text-[11px] font-bold ${bet.edge >= 0 ? 'text-mint' : 'text-rose'}`}>{signed(bet.edge * 100)}%</td>
                   <td class="num text-right text-[10.5px] text-white/80">{fmtNgn(bet.stakeNgn)}</td>
                   <td class="text-right">
                     <span class="inline-flex justify-end">
@@ -173,6 +187,15 @@
             </tbody>
           </table>
         </div>
+        {#if data.pageCount > 1}
+          <div class="flex items-center justify-between border-t border-white/[0.06] px-4 py-3 text-[10.5px] text-fog">
+            <span>Page {data.page} of {data.pageCount}</span>
+            <div class="flex items-center gap-1.5">
+              <button class="btn btn-ghost !px-2.5 !py-1.5 text-[10px]" disabled={data.page <= 1} onclick={() => update({ page: String(data.page - 1) })} aria-label="Previous page">Previous</button>
+              <button class="btn btn-ghost !px-2.5 !py-1.5 text-[10px]" disabled={data.page >= data.pageCount} onclick={() => update({ page: String(data.page + 1) })} aria-label="Next page">Next</button>
+            </div>
+          </div>
+        {/if}
       </div>
 
       <div class="space-y-4">
@@ -207,12 +230,18 @@
           <div class="flex items-center gap-2 text-[11px] font-semibold text-white"><Info size={13} class="text-sky" /> How the edge is calculated</div>
           <ol class="mt-2 space-y-2 text-[10.5px] leading-relaxed text-fog">
             <li><span class="font-semibold text-white">1.</span> Collect prices from eight bookmakers and remove the overround with proportional de-vigging.</li>
-            <li><span class="font-semibold text-white">2.</span> Blend Dixon–Coles, Elo, gradient boosting and the market prior into one probability.</li>
+            <li><span class="font-semibold text-white">2.</span> Blend Dixon–Coles, Elo, gradient boosting and the market prior into one probability; publish that card at kickoff and never move it.</li>
             <li><span class="font-semibold text-white">3.</span> Edge = model probability × best available decimal odds − 1.</li>
-            <li><span class="font-semibold text-white">4.</span> Stake only when edge ≥ 2.5%; size with quarter-Kelly and a 5% cap.</li>
+            <li><span class="font-semibold text-white">4.</span> Stake only when edge ≥ 0.5%; size with quarter-Kelly and a 5% cap.</li>
           </ol>
         </div>
 
+        {#if isAll}
+        <div class="panel p-4">
+          <div class="flex items-center gap-2 text-[11px] font-semibold text-white"><ShieldCheck size={13} class="text-mint" /> Every fixture is projected</div>
+          <p class="mt-2 text-[10.5px] leading-relaxed text-fog">No league or tournament is sampled down. Each fixture gets its own frozen headline at kickoff, and the full schedule stays paginated rather than truncated. Value tags show where the price is also worth a stake.</p>
+        </div>
+        {:else}
         <div class="panel p-4">
           <div class="flex items-center gap-2 text-[11px] font-semibold text-white"><ShieldCheck size={13} class="text-mint" /> Passing is a position</div>
           <div class="mt-2 space-y-1.5">
@@ -230,6 +259,7 @@
           </div>
           <p class="mt-2 text-[9.5px] text-fog-dim">These fixtures have no edge at current prices. The model recommends no bet.</p>
         </div>
+        {/if}
       </div>
     </div>
   {/if}

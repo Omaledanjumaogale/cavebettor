@@ -57,7 +57,18 @@ export function pushChance(marketId: string, selection: string): number {
   return Number.isInteger(Number(line[2])) ? PUSH_CHANCE : 0;
 }
 
-export function screenSelection(input: ScreenInput): ScreenResult {
+export interface ScreenOptions {
+  minStrike?: number;
+  minEdge?: number;
+  maxEdge?: number;
+  maxGap?: number;
+}
+
+export function screenSelection(input: ScreenInput, options: ScreenOptions = {}): ScreenResult {
+  const minStrike = options.minStrike ?? MIN_STRIKE;
+  const minEdge = options.minEdge ?? MIN_EDGE;
+  const maxEdge = options.maxEdge ?? MAX_EDGE;
+  const maxGap = options.maxGap ?? MAX_GAP;
   const push = pushChance(input.marketId, input.selection);
   const probability = input.probability * (1 - push);
   const implied = 1 / Math.max(1.01, input.odds);
@@ -65,10 +76,10 @@ export function screenSelection(input: ScreenInput): ScreenResult {
   const gap = probability - implied;
   const base = { probability, edge, gap, push };
 
-  if (probability < MIN_STRIKE) return { ...base, pass: false, reason: 'strike' };
-  if (edge < MIN_EDGE || edge > MAX_EDGE) return { ...base, pass: false, reason: 'edge' };
+  if (probability < minStrike) return { ...base, pass: false, reason: 'strike' };
+  if (edge < minEdge || edge > maxEdge) return { ...base, pass: false, reason: 'edge' };
   // The price is already the most generous one on the market, so this gap is
   // the smallest honest version of the model-versus-market disagreement.
-  if (gap > MAX_GAP) return { ...base, pass: false, reason: 'gap' };
+  if (gap > maxGap) return { ...base, pass: false, reason: 'gap' };
   return { ...base, pass: true };
 }

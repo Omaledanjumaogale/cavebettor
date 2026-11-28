@@ -1,16 +1,14 @@
 import { SPORTS } from '#lib/data/catalog';
 import { fixtureLeague, resolveTeam } from '#lib/data/registry';
 import { getPrediction } from '#lib/engine/predictions';
-import { cardOf } from '#lib/snapshot';
-import { liveCards, readSnapshot } from '#lib/server/live';
+import { readSnapshot } from '#lib/server/live';
 import { feedMeta, pageFixtureUniverse } from '#lib/server/feed';
 import { FINISHED_TTL_MS, partitionFixtures } from '#lib/server/lifecycle';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-  const [universe, cards, liveSnapshot, meta] = await Promise.all([
+  const [universe, liveSnapshot, meta] = await Promise.all([
     pageFixtureUniverse(),
-    liveCards(),
     readSnapshot<any>('live'),
     feedMeta()
   ]);
@@ -47,11 +45,11 @@ export const load: PageServerLoad = async () => {
     upcomingRows = buckets.upcoming.slice(0, 10);
   }
 
-  const rows = (items: any[]) => items.map((row: any) => ({ fixture: row.fixture ?? row, prediction: row.prediction }));
+  const rows = (items: any[]) => items.map((row: any) => ({ fixture: row.fixture ?? row }));
 
-  const pack = (row: { fixture: any; prediction?: any }) => {
+  const pack = (row: { fixture: any }) => {
     const f = row.fixture;
-    const p = row.prediction ?? cards?.[f.id] ?? cardOf(getPrediction(f));
+    const p = getPrediction(f);
     return {
       fixture: f,
       prediction: p,

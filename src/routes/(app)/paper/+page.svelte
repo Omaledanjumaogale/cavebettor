@@ -69,7 +69,7 @@
       <div class="space-y-2 text-[10.5px]">
         {#each [
           ['Stake sizing', 'Quarter-Kelly, capped at 5% of bankroll'],
-          ['Minimum edge', '2.5% after de-vigging'],
+          ['Minimum edge', '0.5% after de-vigging'],
           ['Price policy', 'Best available across 8 books'],
           ['Settlement', 'Closing line and final result'],
           ['No chasing', 'Losing days never change unit size'],

@@ -1,23 +1,10 @@
-import { getAnalytics, getDailyBrief, getDashboard } from '#lib/engine/analytics';
+import { getAnalytics, getDailyBrief, getDashboard, getOddsMovers } from '#lib/engine/analytics';
 import { LEAGUES, MODELS, DATA_SOURCES, TEAM_MAP, LEAGUE_MAP } from '#lib/data/catalog';
 import { awayTeam, fixtureLeague, homeTeam } from '#lib/data/registry';
 import { feedMeta, mergedFixtures, sportCounts } from '#lib/server/feed';
-import { readSnapshot } from '#lib/server/live';
 import type { PageServerLoad } from './$types';
 
-interface DashboardSnapshot {
-  counts: ReturnType<typeof getDashboard>['counts'];
-  metrics: ReturnType<typeof getDashboard>['metrics'];
-  curve: ReturnType<typeof getDashboard>['curve'];
-  live: { fixture: any; prediction: any }[];
-  upcoming: { fixture: any; prediction: any }[];
-  valueBets: any[];
-  brief: any;
-  movers: any[];
-}
-
 export const load: PageServerLoad = async () => {
-  const snap = await readSnapshot<DashboardSnapshot>('dashboard');
   const dashboard = getDashboard();
   const analytics = getAnalytics();
   const [wireSet, wireMeta] = await Promise.all([mergedFixtures(), feedMeta()]);
@@ -51,26 +38,23 @@ export const load: PageServerLoad = async () => {
     live: wireLive
   };
 
-  const counts = snap?.counts ?? dashboard.counts;
-  const metrics = snap?.metrics ?? dashboard.metrics;
-  const curve = snap?.curve ?? dashboard.curve.filter((_, i) => i % 2 === 0);
-  const live = snap?.live ?? dashboard.live.slice(0, 6).map((f) => ({
+  const { counts, metrics } = dashboard;
+  const curve = dashboard.curve.filter((_, i) => i % 2 === 0);
+  const live = dashboard.live.slice(0, 6).map((f) => ({
     fixture: f,
     prediction: dashboard.predictions.find((p) => p.fixture.id === f.id)!.prediction
   }));
-  const upcoming = snap?.upcoming ?? dashboard.upcoming.slice(0, 8).map((f) => ({
+  const upcoming = dashboard.upcoming.slice(0, 8).map((f) => ({
     fixture: f,
     prediction: dashboard.predictions.find((p) => p.fixture.id === f.id)!.prediction
   }));
-  const valueBets = (snap?.valueBets ?? []).length
-    ? [...snap!.valueBets].sort((a: any, b: any) => (b.modelProbability ?? 0) - (a.modelProbability ?? 0))
-    : dashboard.valueBets.map((v) => ({
-        ...v,
-        fixture: v.fixture,
-        fixtureLabel: `${TEAM_MAP[v.fixture.homeId]?.name} vs ${TEAM_MAP[v.fixture.awayId]?.name}`,
-        leagueLabel: LEAGUE_MAP[v.fixture.leagueId]?.name,
-        sport: v.fixture.sport
-      }));
+  const valueBets = dashboard.valueBets.map((v) => ({
+    ...v,
+    fixture: v.fixture,
+    fixtureLabel: `${TEAM_MAP[v.fixture.homeId]?.name} vs ${TEAM_MAP[v.fixture.awayId]?.name}`,
+    leagueLabel: LEAGUE_MAP[v.fixture.leagueId]?.name,
+    sport: v.fixture.sport
+  }));
 
   return {
     counts,
@@ -87,7 +71,7 @@ export const load: PageServerLoad = async () => {
       leagueLabel: v.leagueLabel ?? LEAGUE_MAP[v.fixture?.leagueId]?.name,
       sport: v.sport ?? v.fixture?.sport
     })),
-    brief: snap?.brief ?? (() => {
+    brief: (() => {
       const brief = getDailyBrief();
       return {
         generatedAt: brief.generatedAt,
@@ -97,14 +81,22 @@ export const load: PageServerLoad = async () => {
         watchlist: brief.watchlist
       };
     })(),
-    movers: snap?.movers ?? [],
+    movers: getOddsMovers().map((m) => ({
+      fixtureId: m.fixture.id,
+      leagueId: m.fixture.leagueId,
+      homeId: m.fixture.homeId,
+      awayId: m.fixture.awayId,
+      selection: m.selection,
+      odds: m.odds,
+      drift: m.drift
+    })),
     roiBySport: analytics.roiBySport,
     roiByMarket: analytics.roiByMarket,
     monthly: analytics.monthly,
     leagues: LEAGUES.map((l) => ({
       ...l,
       tracked: counts.leagues > 0,
-      fixtures: [...(snap?.upcoming ?? []), ...(snap?.live ?? [])].filter((f: any) => f.fixture?.leagueId === l.id).length
+      fixtures: [...upcoming, ...live].filter((f: any) => f.fixture?.leagueId === l.id).length
     })),
     models: MODELS.slice(0, 4).map((m) => ({
       id: m.id,

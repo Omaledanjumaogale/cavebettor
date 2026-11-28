@@ -95,10 +95,13 @@ describe('prediction engine', () => {
     }
   });
 
-  it('ranks selections by strike rate, not by price', () => {
+  it('leads with the headline call, then ranks the rest by strike rate', () => {
     const board = prediction.recommendations;
     expect(board.length).toBeGreaterThan(0);
-    for (let i = 1; i < board.length; i++) {
+    // The headline is chosen for the best blend of strike rate and price, so
+    // it can sit a fraction below the highest-probability supporting leg.
+    // Everything after it is strictly probability-ranked.
+    for (let i = 2; i < board.length; i++) {
       expect(board[i - 1].modelProbability).toBeGreaterThanOrEqual(board[i].modelProbability);
     }
     // Nothing on the board is a lottery ticket or a sub-1.05 stake.

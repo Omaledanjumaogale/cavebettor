@@ -94,6 +94,30 @@ export function fairOdds(probability: number): number {
   return probability > 0.0001 ? round(1 / probability, 2) : 999;
 }
 
+/**
+ * How much to trust a single selection, on a 45–95 scale.
+ *
+ * Confidence tracks the selection's own win probability rather than the
+ * match's entropy, so an 88% over 1.5 reads ~86 and a 66% handicap reads
+ * ~63. Three adjustments keep it honest:
+ *   - weak data quality lowers it;
+ *   - a wide model-versus-price disagreement lowers it (the market is a
+ *     second opinion, not an obstacle);
+ *   - a genuine edge raises it slightly, while a sub-1.20 price is docked
+ *     because the payout cannot justify the risk.
+ */
+export function confidenceFor(probability: number, odds: number, dataQuality = 0.9): number {
+  const p = clamp(probability, 0.01, 0.99);
+  const implied = 1 / Math.max(1.01, odds);
+  const gap = Math.abs(p - implied);
+  const edge = clamp(p * odds - 1, -1, 0.3);
+  const qualityPenalty = (1 - clamp(dataQuality, 0.5, 1)) * 22;
+  const disagreementPenalty = gap * 26;
+  const edgeBonus = clamp(edge, 0, 0.25) * 12;
+  const shortPricePenalty = odds < 1.2 ? (1.2 - odds) * 18 : 0;
+  return Math.round(clamp(p * 100 - qualityPenalty - disagreementPenalty + edgeBonus - shortPricePenalty, 45, 95));
+}
+
 export function kellyFraction(probability: number, odds: number, fraction = 0.25): number {
   const b = odds - 1;
   if (b <= 0) return 0;

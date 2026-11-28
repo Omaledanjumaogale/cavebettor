@@ -2,8 +2,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
 import { ConvexHttpClient } from 'convex/browser';
 import { buildSnapshotBundle } from '#lib/snapshot';
-import type { Fixture, Prediction } from '#lib/types';
-import type { PredictionCard } from '#lib/snapshot';
+import type { Fixture } from '#lib/types';
 
 const url = publicEnv.PUBLIC_CONVEX_URL || process.env.PUBLIC_CONVEX_URL || '';
 const demoMode = (publicEnv.PUBLIC_DEMO_MODE || process.env.PUBLIC_DEMO_MODE || 'false') === 'true';
@@ -53,26 +52,6 @@ export async function readSnapshot<T>(key: string): Promise<T | null> {
 
 export async function liveFixtures(): Promise<Fixture[] | null> {
   return readSnapshot<Fixture[]>('fixtures');
-}
-
-export async function liveCards(): Promise<Record<string, PredictionCard> | null> {
-  return readSnapshot<Record<string, PredictionCard>>('cards');
-}
-
-export async function livePrediction(fixtureId: string): Promise<Prediction | null> {
-  if (!convexConfigured()) return null;
-  const key = `prediction:${fixtureId}`;
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 30_000) return hit.value as Prediction;
-  try {
-    const row = await withTimeout(getClient().query('live:prediction' as never, { fixtureKey: fixtureId } as never));
-    if (!row || typeof (row as { payload?: unknown }).payload !== 'string') return null;
-    const value = JSON.parse((row as { payload: string }).payload) as Prediction;
-    cache.set(key, { at: Date.now(), value });
-    return value;
-  } catch {
-    return null;
-  }
 }
 
 export async function liveSyncStatus() {

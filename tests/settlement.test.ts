@@ -28,6 +28,33 @@ describe('market settlement', () => {
     expect(settleSelection(match({ score: { home: 1, away: 1 } }), '1x2', 'Draw')).toBe(true);
   });
 
+  it('resolves team names from ids when the fixture has no embedded teams', () => {
+    const bare = match({ homeTeam: undefined, awayTeam: undefined });
+    expect(settleSelection(bare, 'ml', 'Arsenal')).toBe(true);
+    expect(settleSelection(bare, '1x2', 'Chelsea win')).toBe(false);
+  });
+
+  it('settles tennis games totals against the set scores', () => {
+    const tennis = match({
+      sport: 'tennis',
+      leagueId: 'atp',
+      homeId: 'jannik-sinner',
+      awayId: 'holger-rune',
+      homeTeam: undefined,
+      awayTeam: undefined,
+      score: { home: 1, away: 2 },
+      periods: [
+        { label: 'Set 1', home: 0, away: 6 },
+        { label: 'Set 2', home: 6, away: 0 },
+        { label: 'Set 3', home: 2, away: 6 }
+      ]
+    });
+    // 20 games, not 3 sets.
+    expect(settleSelection(tennis, 'games195', 'match over 19.5')).toBe(true);
+    expect(settleSelection(tennis, 'games255', 'match under 25.5')).toBe(true);
+    expect(settleSelection(tennis, 'set1total', 'Set 1 over 5.5')).toBe(true);
+  });
+
   it('settles both teams to score', () => {
     expect(settleSelection(match(), 'btts', 'Yes')).toBe(true);
     expect(settleSelection(match({ score: { home: 2, away: 0 } }), 'btts', 'No')).toBe(true);

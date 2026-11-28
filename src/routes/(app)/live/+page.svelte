@@ -58,7 +58,7 @@
         <span class="live-dot h-1.5 w-1.5 rounded-full bg-mint"></span> Live centre
       </div>
       <h1 class="display text-[22px] font-bold tracking-tight text-white sm:text-[26px]">In-play intelligence</h1>
-      <p class="mt-1 text-[12.5px] text-fog">Re-priced every 30 seconds. Probabilities account for score, minute and remaining scoring rate.</p>
+      <p class="mt-1 text-[12.5px] text-fog">Kickoff calls stay frozen. The scoreboard is live context; the recommended markets and confidence you see are the ones published before the first whistle.</p>
       <div class="mt-2 flex flex-wrap items-center gap-2 text-[10.5px] text-fog-dim">
         <span class="chip {data.origin === 'provider' ? 'chip-lime' : 'chip-amber'}">
           {data.origin === 'provider' ? 'API-Sports live feed' : data.origin === 'convex' ? 'cached snapshot' : 'engine fallback'}
@@ -81,7 +81,7 @@
     {#each [
       { label: 'Live matches', value: String(data.counts.live), sub: `${data.counts.leagues} competitions`, colour: '#35e7a1' },
       { label: 'Goals in play', value: String(data.counts.goals), sub: 'across all live games', colour: '#c9ff4d' },
-      { label: 'Live edges', value: String(data.counts.value), sub: 'clearing 2.5% threshold', colour: '#f6c453' },
+      { label: 'Value calls', value: String(data.counts.value), sub: 'clearing 0.5% threshold', colour: '#f6c453' },
       { label: 'Last refresh', value: relativeTime(lastUpdate), sub: 'Africa/Lagos', colour: '#6fc9ff' }
     ] as kpi}
       <div class="panel p-3.5">

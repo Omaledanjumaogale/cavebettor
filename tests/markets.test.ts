@@ -115,23 +115,32 @@ describe('totals and handicap markets', () => {
       for (const rec of card.recommendations) {
         if (lineOf(rec.selection) === null) continue;
         if (!/total/i.test(rec.market)) continue;
-        expect(rec.modelProbability).toBeGreaterThanOrEqual(0.66);
-        expect(rec.modelProbability).toBeLessThanOrEqual(0.93);
+        expect(rec.modelProbability).toBeGreaterThanOrEqual(0.58);
+        expect(rec.modelProbability).toBeLessThanOrEqual(0.94);
         expect(rec.odds).toBeGreaterThanOrEqual(1.05);
       }
     }
   });
 
-  it('takes interval markets off the board once the clock starts', () => {
-    // A first-half line after the interval whistle is a settled market with a
-    // price on it. Pricing it against the minutes that remain invented a
-    // 40-point edge that then appeared on the board and in the ledger.
+  it('keeps the kickoff card frozen once the clock starts', () => {
+    // A live score must never rewrite the published board. The interval
+    // markets stay exactly as they were priced before the whistle, and the
+    // settlement is graded against those calls.
     for (const fixture of fixtures.filter((f) => f.status !== 'scheduled')) {
       const card = getPrediction(fixture);
-      expect(card.markets.filter((m) => m.group === 'period' || m.group === 'sets')).toHaveLength(0);
-      for (const rec of card.recommendations) {
-        expect(/^(ht|h1|p[0-9]|q[0-9]|set1)/.test(rec.marketId ?? '')).toBe(false);
-      }
+      const kickoff = {
+        ...fixture,
+        status: 'scheduled' as const,
+        minute: undefined,
+        score: { home: 0, away: 0 },
+        periods: undefined,
+        stats: undefined,
+        finishedAt: undefined
+      };
+      const pre = getPrediction(kickoff);
+      expect(card.recommendations).toEqual(pre.recommendations);
+      expect(card.confidence).toBe(pre.confidence);
+      expect(card.probabilities).toEqual(pre.probabilities);
     }
   });
 
@@ -168,10 +177,11 @@ describe('totals and handicap markets', () => {
     }
   });
 
-  it('ranks every board by model probability', () => {
+  it('ranks the supporting board by model probability', () => {
     for (const fixture of fixtures) {
       const card = getPrediction(fixture);
-      const probabilities = card.recommendations.map((r) => r.modelProbability);
+      if (card.recommendations.length < 3) continue;
+      const probabilities = card.recommendations.slice(1).map((r) => r.modelProbability);
       const sorted = [...probabilities].sort((a, b) => b - a);
       expect(probabilities).toEqual(sorted);
     }

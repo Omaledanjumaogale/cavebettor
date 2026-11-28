@@ -4,21 +4,19 @@ import { awayTeam, fixtureLeague, homeTeam, resolveTeam } from '#lib/data/regist
 import { getFixture } from '#lib/engine/fixtures';
 import { getPrediction } from '#lib/engine/predictions';
 import { getLeagueTable } from '#lib/engine/analytics';
-import { cardOf } from '#lib/snapshot';
-import { liveCards, livePrediction } from '#lib/server/live';
 import { pageFixtureUniverse } from '#lib/server/feed';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
-  const [universe, cards] = await Promise.all([pageFixtureUniverse(), liveCards()]);
+  const universe = await pageFixtureUniverse();
   const fixture = universe.fixtures.find((f) => f.id === params.id) ?? getFixture(params.id);
   if (!fixture) {
     // Results leave the board 24 hours after full time; the settled markets
     // stay in the retraining archive, not on a page.
     throw error(404, 'This fixture has left the board. Results are archived 24 hours after full time and used to retrain the models.');
   }
-  const prediction = (await livePrediction(fixture.id)) ?? getPrediction(fixture);
-  const cardFor = (f: typeof fixture) => cards?.[f.id] ?? cardOf(getPrediction(f));
+  const prediction = getPrediction(fixture);
+  const cardFor = (f: typeof fixture) => getPrediction(f);
   const league = fixtureLeague(fixture);
   const home = homeTeam(fixture);
   const away = awayTeam(fixture);

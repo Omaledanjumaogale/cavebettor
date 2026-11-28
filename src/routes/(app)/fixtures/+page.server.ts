@@ -1,8 +1,6 @@
 import { LEAGUES, SPORTS, TEAM_MAP } from '#lib/data/catalog';
 import { fixtureLeague, homeTeam, awayTeam } from '#lib/data/registry';
 import { getPrediction } from '#lib/engine/predictions';
-import { cardOf } from '#lib/snapshot';
-import { liveCards } from '#lib/server/live';
 import { feedMeta, pageFixtureUniverse, sportCounts } from '#lib/server/feed';
 import { FINISHED_TTL_MS, lifecycleOf } from '#lib/server/lifecycle';
 import { compareSchedule, nextUp, sortBySchedule } from '#lib/schedule';
@@ -21,7 +19,7 @@ export const load: PageServerLoad = async ({ url }) => {
   const within = url.searchParams.get('within') ?? 'all';
   const page = Math.max(1, Number(url.searchParams.get('page') ?? '1') || 1);
 
-  const [universe, cards, meta] = await Promise.all([pageFixtureUniverse(), liveCards(), feedMeta()]);
+  const [universe, meta] = await Promise.all([pageFixtureUniverse(), feedMeta()]);
   const all = universe.fixtures;
 
   const dayKey = (iso: string) => iso.slice(0, 10);
@@ -61,17 +59,19 @@ export const load: PageServerLoad = async ({ url }) => {
     return true;
   });
 
+  // The value filter applies before pagination, otherwise a page can be
+  // half empty while later pages still contain qualifying fixtures.
+  const eligible = status === 'value' ? filtered.filter((f) => getPrediction(f).valueBets.length > 0) : filtered;
+
   // Rank by the schedule before slicing: the page must show the next matches,
   // not the most likely ones. Probability ranks the value board instead.
-  const scheduled = status === 'finished' ? [...filtered].sort((a, b) => compareSchedule(b, a)) : sortBySchedule(filtered);
+  const scheduled = status === 'finished' ? [...eligible].sort((a, b) => compareSchedule(b, a)) : sortBySchedule(eligible);
 
   // Predictions are only computed for the slice that is actually rendered.
   const pageCount = Math.max(1, Math.ceil(scheduled.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const window = scheduled.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const rows = window
-    .map((fixture) => ({ fixture, prediction: cards?.[fixture.id] ?? cardOf(getPrediction(fixture)) }))
-    .filter((row) => (status === 'value' ? row.prediction.valueBets.length > 0 : true));
+  const rows = window.map((fixture) => ({ fixture, prediction: getPrediction(fixture) }));
 
   // The single earliest kick-off that has not started yet, marked on the page.
   const upcomingNext = nextUp(rows, Date.now());

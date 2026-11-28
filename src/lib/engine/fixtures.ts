@@ -466,8 +466,10 @@ const KICKOFF_SLOTS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22];
 /**
  * Generate the fixture universe from a fixed calendar.
  *
- * Every competition plays two matches a day in one of eight three-hour slots,
- * and the kick-off is a real calendar timestamp. That is what makes a match a
+ * Every competition plays a full matchday, not a hand-picked two matches:
+ * every team in the catalogue is paired once per day using a rotating
+ * round-robin, so no team is silently omitted and no league is truncated.
+ * The kick-off is a real calendar timestamp. That is what makes a match a
  * match: the id, the final score and the goal script are pinned to the
  * kick-off, so refreshing the board an hour later shows the same fixture
  * further along, not a new fixture with a new score.
@@ -484,12 +486,16 @@ export function generateFixtures(now = Date.now()): Fixture[] {
     for (const offset of SCHEDULE_DAYS) {
       const day = today + offset;
       const rand = mulberry32(hashString(`${league.id}-${day}`));
-      const perDay = Math.min(2, teams.length);
+      // Rotate the list by the day, then pair from the outside in. Every
+      // team plays exactly once and the pairings change from round to round.
+      const rotated = teams.map((_, index) => teams[(index + ((day % teams.length) + teams.length)) % teams.length]);
+      const perDay = Math.floor(teams.length / 2);
       for (let i = 0; i < perDay; i++) {
-        const slot = KICKOFF_SLOTS[(li * 2 + i + day * 5 + 24) % KICKOFF_SLOTS.length];
+        const slot = KICKOFF_SLOTS[(li * 3 + i + day * 7 + 24) % KICKOFF_SLOTS.length];
         const kickoff = new Date(day * DAY_MS + (slot * 60 + Math.floor(rand() * 15)) * 60_000);
-        const home = teams[(day + i * 2) % teams.length];
-        const away = teams[(day + i * 2 + 1) % teams.length];
+        const flip = (day + i) % 2 === 0;
+        const home = flip ? rotated[i] : rotated[teams.length - 1 - i];
+        const away = flip ? rotated[teams.length - 1 - i] : rotated[i];
         if (home.id === away.id) continue;
         const round =
           league.sport === 'football'

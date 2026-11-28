@@ -71,7 +71,7 @@ function deterministic(fixture: Fixture, prediction: Prediction): AnalysisResult
         heading: 'Where the value sits',
         body: best
           ? `${best.selection} in the ${best.market} is available at ${best.odds.toFixed(2)} with ${best.bookmaker}. The model prices it at ${(best.modelProbability * 100).toFixed(1)}%, an edge of ${(best.edge * 100).toFixed(1)}%. Quarter-Kelly on the ₦1.25m paper bankroll suggests ${Math.round(best.stakeNgn / 100) * 100 > 0 ? `₦${best.stakeNgn.toLocaleString('en-NG')}` : 'a minimum stake'}. If the price shortens below ${best.odds.toFixed(2)}, the edge disappears.`
-          : `No selection currently clears the 2.5% edge threshold. ${prediction.recommended.selection} is the most likely outcome but the price is efficient. The disciplined play is to wait for a better number or pass.`
+          : `No selection currently clears the 0.5% edge threshold. ${prediction.recommended.selection} is the most likely outcome but the price is efficient. The disciplined play is to wait for a better number or pass.`
       },
       {
         heading: 'Risk and conditions',

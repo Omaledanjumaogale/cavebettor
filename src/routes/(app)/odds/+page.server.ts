@@ -3,24 +3,18 @@ import { awayTeam, fixtureLeague, homeTeam, resolveTeam } from '#lib/data/regist
 import { getPrediction } from '#lib/engine/predictions';
 import { arbitrage, bookPrices } from '#lib/engine/books';
 import { getOddsMovers } from '#lib/engine/analytics';
-import { liveCards, livePrediction } from '#lib/server/live';
 import { pageFixtureUniverse } from '#lib/server/feed';
 import { applyMarketPrices, readMarketPrices } from '#lib/server/providers/marketFeed';
 import type { PageServerLoad } from './$types';
 import { sortBySchedule } from '#lib/schedule';
 
 export const load: PageServerLoad = async ({ url }) => {
-  const [universe, cards, marketBundle] = await Promise.all([
-    pageFixtureUniverse(),
-    liveCards(),
-    readMarketPrices()
-  ]);
-  // Price a bounded slate: the whole window is too large to model per request.
-  // The slate is the next 40 kick-offs, in schedule order.
-  const upcoming = sortBySchedule(universe.fixtures.filter((f) => f.status !== 'finished')).slice(0, 40);
+  const [universe, marketBundle] = await Promise.all([pageFixtureUniverse(), readMarketPrices()]);
+  // The odds desk covers the whole schedulable slate, not an arbitrary 40.
+  const upcoming = sortBySchedule(universe.fixtures.filter((f) => f.status !== 'finished'));
   const selectedId = url.searchParams.get('id') ?? upcoming[0]?.id;
   const fixture = upcoming.find((f) => f.id === selectedId) ?? upcoming[0];
-  const prediction = (await livePrediction(fixture.id)) ?? getPrediction(fixture);
+  const prediction = getPrediction(fixture);
   const league = fixtureLeague(fixture);
 
   // Overlay the real market prices when the collector has any for this match.
@@ -51,18 +45,13 @@ export const load: PageServerLoad = async ({ url }) => {
 
   const arbs = upcoming
     .map((f) => {
-      const card = cards?.[f.id];
       const home = resolveTeam(f.homeId, f.leagueId);
       const away = resolveTeam(f.awayId, f.leagueId);
-      const probabilities = card
-        ? card.probabilities.draw > 0.005
-          ? [card.probabilities.home, card.probabilities.draw, card.probabilities.away]
-          : [card.probabilities.home, card.probabilities.away]
-        : (() => {
-            const p = getPrediction(f);
-            const main = p.markets.find((m) => m.id === '1x2' || m.id === 'ml');
-            return main ? main.outcomes.map((o) => o.modelProbability) : [];
-          })();
+      const p = getPrediction(f);
+      const probabilities =
+        p.probabilities.draw > 0.005
+          ? [p.probabilities.home, p.probabilities.draw, p.probabilities.away]
+          : [p.probabilities.home, p.probabilities.away];
       if (probabilities.length < 2) return null;
       const labels = probabilities.length === 3 ? [`${home.name} win`, 'Draw', `${away.name} win`] : [home.name, away.name];
       const result = arbitrage(probabilities, `${f.id}-arb`);

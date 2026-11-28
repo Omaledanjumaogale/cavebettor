@@ -65,10 +65,11 @@ export function getPaperBets(): PaperBet[] {
 
   const bets: PaperBet[] = [];
 
-  // Settled ledger: at most three calls per finished fixture, exactly the cap
-  // the board applies to correlated legs.
+  // Settled ledger: at most three positive-edge calls per finished fixture.
+  // Only value bets are staked; the ranked board also carries fair-priced
+  // projections, and putting money on those would guarantee a losing book.
   for (const fixture of settledFixtures) {
-    for (const call of getPrediction(fixture).recommendations.slice(0, 3)) {
+    for (const call of getPrediction(fixture).valueBets.slice(0, 3)) {
       // Grade against the result the fixture page shows, so the ledger and the
       // match lab can never disagree about the same call.
       const grade = settleSelection(fixture, call.marketId ?? '', call.selection);
@@ -98,7 +99,7 @@ export function getPaperBets(): PaperBet[] {
   // Open exposure: the leading published call on each fixture still to settle.
   let open = 0;
   for (const fixture of openFixtures) {
-    const call = getPrediction(fixture).recommendations[0];
+    const call = getPrediction(fixture).valueBets[0];
     if (!call) continue;
     if (open >= 9) break;
     bets.push({
@@ -394,7 +395,7 @@ function buildDailyBrief() {
   return {
     generatedAt: new Date().toISOString(),
     headline: `${fixtures.length} fixtures scanned across ${new Set(fixtures.map((f) => f.leagueId)).size} competitions`,
-    body: `The ensemble is running at ${avgConfidence}% mean confidence with ${value.length} headline signals clear of the 2.5% edge threshold. ${live.length} matches are live and being re-priced every 30 seconds. The strongest signal is ${value[0]?.selection ?? 'still forming'} at ${value[0]?.odds.toFixed(2) ?? '—'} (${((value[0]?.edge ?? 0) * 100).toFixed(1)}% edge).`,
+    body: `The ensemble is running at ${avgConfidence}% mean confidence with ${value.length} headline signals clear of the 0.5% edge threshold. ${live.length} matches are live; every board card remains the one published at kick-off and is never re-priced from the score. The strongest signal is ${value[0]?.selection ?? 'still forming'} at ${value[0]?.odds.toFixed(2) ?? '—'} (${((value[0]?.edge ?? 0) * 100).toFixed(1)}% edge).`,
     analysis: `${value.length ? `Best-price shopping is doing the work today: the top ${value.length} signals sit ${((value.reduce((a, v) => a + v.edge, 0) / Math.max(1, value.length)) * 100).toFixed(1)}% above fair on average, and every one is available at a Nigerian book.` : 'No selection clears the edge threshold, so the disciplined read is to wait rather than force a position.'} Model disagreement is widest in the ${live.length ? 'in-play totals' : 'handicap markets'}, where line movement has been sharper than the pre-match close. Treat the paper desk as the risk reference: ${Math.round(avgConfidence)}% mean confidence, positive closing-line value, and drawdown still inside the guardrail. Re-check after the next price refresh before committing size.`,
     live,
     upcoming,

@@ -56,7 +56,7 @@
 
   const faqs = [
     { q: 'Is CaveBettor a betting platform?', a: 'No. It is research software. You cannot deposit money, place a bet, or open a wallet. CaveBettor generates probabilities, compares market prices and records paper selections so you can evaluate the model.' },
-    { q: 'Why ₦5,000 per month?', a: 'One price unlocks every feature: all sports, all leagues, all markets, live probabilities, the model lab, the data pipeline and the analyst. Every desk feature — five seats, the shared decision log, webhooks, priority data slots and role-based access — is included in Pro at no extra cost.' },
+    { q: 'Why ₦5,000 per month?', a: 'One price unlocks every feature: all sports, all leagues, all markets, frozen pre-match probabilities, the model lab, the data pipeline and the analyst. Every desk feature — five seats, the shared decision log, webhooks, priority data slots and role-based access — is included in Pro at no extra cost.' },
     { q: 'Do you guarantee winnings?', a: 'No, and any product that does is lying. Probabilities are estimates. Variance is real. CaveBettor publishes its calibration, ROI, yield and drawdown — including losing months — so you can judge the process.' },
     { q: 'Where does the data come from?', a: 'Public fixture and team data, licensed sports APIs when you supply keys, and permission-aware collectors. Each source has a health status and a coverage score in the pipeline console. Live scraping is opt-in.' },
     { q: 'Can I use it from outside Nigeria?', a: 'Yes. The interface is global, but the primary currency is the Nigerian Naira and the commercial plan is priced in NGN. You can change the display currency in Settings.' },

@@ -326,7 +326,7 @@
               </table>
             </div>
           {:else}
-            <div class="px-4 py-6 text-center text-[11.5px] text-fog">No selection clears the 2.5% edge threshold. The disciplined play is to pass or wait for a better price.</div>
+            <div class="px-4 py-6 text-center text-[11.5px] text-fog">No selection clears the 0.5% edge threshold. The disciplined play is to pass or wait for a better price.</div>
           {/if}
         </div>
 

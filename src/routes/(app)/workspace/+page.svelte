@@ -157,7 +157,7 @@
             { title: '2 · Sport-specific distribution', body: 'Football and hockey use a Dixon–Coles corrected bivariate Poisson with time-decayed attack and defence strengths. Basketball uses a normal margin/total model. Baseball uses a pitcher-led run distribution. Tennis uses Elo with surface and fatigue adjustments.' },
             { title: '3 · Machine-learning adjustment', body: 'A gradient-boosted ensemble consumes 142 features: rolling xG, Elo, rest, travel, availability, pace, park factors, weather and market movement. Sequence models run in shadow mode.' },
             { title: '4 · Ensemble and calibration', body: 'Components are weighted by sport and validated for calibration. Probabilities are never allowed to drift arbitrarily far from the market prior; large disagreements require supporting features.' },
-            { title: '5 · Edge and staking', body: 'Edge = model probability × best price − 1. Only edges above 2.5% survive. Stakes use quarter-Kelly with a 5% bankroll cap. Correlated legs are excluded from accumulators.' },
+            { title: '5 · Edge and staking', body: 'Edge = model probability × best price − 1. Only positive edges above 0.5% survive. Stakes use quarter-Kelly with a 5% bankroll cap. Correlated legs are excluded from accumulators.' },
             { title: '6 · Measurement', body: 'Every recommendation is recorded at the best available price and scored against the closing line and the result. Calibration, CLV, ROI, yield and drawdown are published — including the losses.' }
           ] as step}
             <div class="rounded-xl border border-white/[0.06] bg-black/15 p-3">

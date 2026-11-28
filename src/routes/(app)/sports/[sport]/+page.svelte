@@ -122,7 +122,7 @@
           <Target size={24} class="text-fog-dim" />
           <p class="mt-2 text-[12px] font-semibold text-white">No qualifying value right now</p>
           <p class="mt-1 max-w-sm text-[11px] text-fog">
-            Nothing in the {def.name.toLowerCase()} universe clears the 2.5% edge floor at current prices. That is a normal state, not an error.
+            Nothing in the {def.name.toLowerCase()} universe clears the 0.5% edge floor at current prices. That is a normal state, not an error.
           </p>
         </div>
       {:else}
