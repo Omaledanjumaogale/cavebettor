@@ -27,11 +27,11 @@
       <div class="mb-1 flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-lime"><WalletCards size={12} /> Paper desk</div>
       <h1 class="display text-[22px] font-bold tracking-tight text-white sm:text-[26px]">Track the process, not the noise.</h1>
       <p class="mt-1 max-w-2xl text-[12.5px] text-fog">
-        CaveBettor is not a sportsbook. This is a paper ledger that records every model recommendation at the best available price so the edge can be measured honestly.
+        CaveBettor is not a sportsbook. This paper ledger records only the calls the board published, at the price it quoted, settled against the result the match lab shows — so the edge can be measured honestly.
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <a href="/api/predictions" class="btn btn-ghost !py-2 text-[11px]"><Download size={12} /> Export</a>
+      <a href="/api/paper/export" download="cavebettor-paper-ledger.csv" class="btn btn-ghost !py-2 text-[11px]"><Download size={12} /> Export</a>
       <a href="/predictions" class="btn btn-primary !py-2 text-[11.5px]"><Plus size={12} /> Find a selection</a>
     </div>
   </div>

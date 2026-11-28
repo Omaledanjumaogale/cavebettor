@@ -9,6 +9,7 @@
  *   npm run audit:markets
  *   npm run audit:markets -- --verbose
  */
+import { getPaperBets } from '../../src/lib/engine/analytics';
 import { getFixtures } from '../../src/lib/engine/fixtures';
 import { getPrediction } from '../../src/lib/engine/predictions';
 import { fixtureLeague } from '../../src/lib/data/registry';
@@ -95,6 +96,17 @@ for (const fixture of getFixtures()) {
     if ((rec.edge ?? 0) < 0) {
       failures.push({ gate: 'edge', detail: `${fixture.id} ${rec.selection} publishes a negative edge` });
     }
+    // A price more than twelve points away from the model is not a
+    // disagreement about the match; it is a market that was modelled against
+    // the wrong distribution. Those used to appear as 35-point 'edges' on
+    // first-half lines that the interval whistle had already settled.
+    const implied = 1 / rec.odds;
+    if (rec.modelProbability - implied > 0.12) {
+      failures.push({
+        gate: 'price',
+        detail: `${fixture.id} ${rec.selection} at ${rec.odds.toFixed(2)} implies ${(implied * 100).toFixed(0)}% against a ${(rec.modelProbability * 100).toFixed(0)}% model`
+      });
+    }
 
     const totals = lineOf(rec.selection);
     if (totals !== null && /total/i.test(rec.market)) {
@@ -139,6 +151,19 @@ for (const fixture of getFixtures()) {
   }
 }
 
+// ── The ledger records only what the board published ───────────────────────
+// A paper desk that logs calls the board refused to print measures a
+// different strategy than the one the product recommends.
+const ledger = getPaperBets();
+for (const bet of ledger) {
+  if (bet.modelProbability < 0.64 || bet.edge < 0.01) {
+    failures.push({
+      gate: 'ledger',
+      detail: `${bet.fixtureId} ${bet.selection} recorded at ${(bet.modelProbability * 100).toFixed(1)}% / edge ${(bet.edge * 100).toFixed(1)}%`
+    });
+  }
+}
+
 const average = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
 
 console.log(`Fixtures audited:      ${stats.fixtures}`);
@@ -148,6 +173,7 @@ console.log(`  mean probability:    ${(average(stats.probability) * 100).toFixed
 console.log(`  mean price:          ${average(stats.odds).toFixed(2)}`);
 console.log(`  mean edge:           ${(average(stats.edge) * 100).toFixed(1)}%`);
 console.log(`  handicaps:           ${stats.handicaps}`);
+console.log(`Paper ledger rows:     ${ledger.length}`);
 
 if (verbose) {
   console.log('\nBy sport:');

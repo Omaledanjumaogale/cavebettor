@@ -10,9 +10,10 @@ import type {
   ValueBet,
   WorkspaceMetrics
 } from '#lib/types';
-import { clamp, hashString, mulberry32, seeded } from './core';
+import { clamp, hashString, mulberry32 } from './core';
 import { getFixtures } from './fixtures';
 import { getPrediction, PAPER_BANKROLL_NGN } from './predictions';
+import { settleSelection } from './settlement';
 
 const START_BANKROLL = PAPER_BANKROLL_NGN;
 const DAY = 86_400_000;
@@ -41,58 +42,80 @@ export function getTopValueBets(limit = 12, fixtures = getFixtures()): (ValueBet
     .slice(0, limit);
 }
 
+/**
+ * The paper ledger records the calls the board actually published. Every entry
+ * cleared the 64% strike-rate floor with a positive edge and carries the same
+ * quarter-Kelly stake the fixture page quotes; a selection the board refused to
+ * print has no place in a ledger that claims to measure its own advice.
+ */
 export function getPaperBets(): PaperBet[] {
-  const fixtures = getFixtures().filter((f) => f.status === 'finished');
-  const openFixtures = getFixtures().filter((f) => f.status !== 'finished');
+  const fixtures = getFixtures();
+  const settledFixtures = fixtures
+    .filter((f) => f.status === 'finished')
+    .sort((a, b) => +new Date(a.kickoff) - +new Date(b.kickoff) || a.id.localeCompare(b.id));
+  const openFixtures = fixtures
+    .filter((f) => f.status !== 'finished')
+    .sort((a, b) => +new Date(a.kickoff) - +new Date(b.kickoff) || a.id.localeCompare(b.id));
+
+  const label = (fixture: Fixture) =>
+    `${resolveTeam(fixture.homeId, fixture.leagueId).shortName} vs ${resolveTeam(fixture.awayId, fixture.leagueId).shortName}`;
+  const stakeOf = (call: { stakeNgn: number }) => Math.max(1000, Math.round(call.stakeNgn / 100) * 100);
+  const idOf = (fixture: Fixture, call: { marketId?: string; selection: string }) =>
+    `bet_${(hashString(`paper-${fixture.id}-${call.marketId ?? 'market'}-${call.selection}`) >>> 0).toString(36)}`;
+
   const bets: PaperBet[] = [];
-  const rand = mulberry32(hashString('paper-bets-v10'));
 
-  for (let i = 0; i < 64; i++) {
-    const fixture = fixtures[i % fixtures.length];
-    const prediction = getPrediction(fixture);
-    const eligible = prediction.markets.flatMap((m) => m.outcomes.map((o) => ({ market: m, outcome: o }))).filter((entry) => entry.outcome.modelProbability >= 0.25 && entry.outcome.modelProbability <= 0.82 && entry.outcome.bookOdds >= 1.5 && entry.outcome.bookOdds <= 6);
-    const entry = eligible[i % Math.max(1, eligible.length)];
-    const pick = entry?.market ?? prediction.markets[0];
-    const outcome = entry?.outcome ?? pick.outcomes[0];
-    const won = seeded(`bet-${i}-result-v10`) < clamp(outcome.modelProbability, 0.2, 0.92);
-    const stake = Math.round((3000 + rand() * 22_000) / 100) * 100;
-    const placedAt = new Date(Date.now() - (2 + i * 1.25) * DAY).toISOString();
-    bets.push({
-      id: `bet_${(hashString(`paper-${i}`) >>> 0).toString(36)}`,
-      fixtureId: fixture.id,
-      fixtureLabel: `${resolveTeam(fixture.homeId, fixture.leagueId).shortName} vs ${resolveTeam(fixture.awayId, fixture.leagueId).shortName}`,
-      selection: outcome.label,
-      market: pick.label,
-      odds: outcome.bookOdds,
-      stakeNgn: stake,
-      status: won ? 'won' : 'lost',
-      modelProbability: outcome.modelProbability,
-      edge: outcome.edge,
-      placedAt,
-      settledAt: new Date(Date.now() - (1.4 + i * 1.2) * DAY).toISOString(),
-      pnlNgn: won ? Math.round(stake * (outcome.bookOdds - 1)) : -stake
-    });
+  // Settled ledger: at most three calls per finished fixture, exactly the cap
+  // the board applies to correlated legs.
+  for (const fixture of settledFixtures) {
+    for (const call of getPrediction(fixture).recommendations.slice(0, 3)) {
+      // Grade against the result the fixture page shows, so the ledger and the
+      // match lab can never disagree about the same call.
+      const grade = settleSelection(fixture, call.marketId ?? '', call.selection);
+      if (grade === null) continue;
+      const index = bets.length;
+      const settledAt = new Date(Date.now() - (1.4 + index * 1.2) * DAY);
+      const stake = stakeOf(call);
+      bets.push({
+        id: idOf(fixture, call),
+        fixtureId: fixture.id,
+        fixtureLabel: label(fixture),
+        selection: call.selection,
+        market: call.market,
+        odds: call.odds,
+        stakeNgn: stake,
+        status: grade ? 'won' : 'lost',
+        modelProbability: call.modelProbability,
+        edge: call.edge,
+        placedAt: new Date(+settledAt - 6 * 3600e3).toISOString(),
+        settledAt: settledAt.toISOString(),
+        pnlNgn: grade ? Math.round(stake * (call.odds - 1)) : -stake
+      });
+    }
   }
 
-  for (let i = 0; i < 9; i++) {
-    const fixture = openFixtures[i % openFixtures.length];
-    const prediction = getPrediction(fixture);
-    const pick = prediction.markets[i % prediction.markets.length];
-    const outcome = pick.outcomes[(i + 1) % pick.outcomes.length];
+  // Open exposure: the leading published call on each fixture still to settle.
+  let open = 0;
+  for (const fixture of openFixtures) {
+    const call = getPrediction(fixture).recommendations[0];
+    if (!call) continue;
+    if (open >= 9) break;
     bets.push({
-      id: `bet_open_${i}`,
+      id: idOf(fixture, call),
       fixtureId: fixture.id,
-      fixtureLabel: `${resolveTeam(fixture.homeId, fixture.leagueId).shortName} vs ${resolveTeam(fixture.awayId, fixture.leagueId).shortName}`,
-      selection: outcome.label,
-      market: pick.label,
-      odds: outcome.bookOdds,
-      stakeNgn: Math.round((5000 + rand() * 18_000) / 100) * 100,
+      fixtureLabel: label(fixture),
+      selection: call.selection,
+      market: call.market,
+      odds: call.odds,
+      stakeNgn: stakeOf(call),
       status: 'open',
-      modelProbability: outcome.modelProbability,
-      edge: outcome.edge,
-      placedAt: new Date(Date.now() - (2 + i) * 3600e3).toISOString()
+      modelProbability: call.modelProbability,
+      edge: call.edge,
+      placedAt: new Date(Date.now() - (2 + open) * 3600e3).toISOString()
     });
+    open += 1;
   }
+
   return bets.sort((a, b) => +new Date(b.placedAt) - +new Date(a.placedAt));
 }
 

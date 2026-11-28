@@ -21,7 +21,7 @@ CaveBettor is an enterprise-grade prediction, odds-intelligence and bankroll-ana
 | **Model lab** | Production/shadow registry, accuracy, log-loss, Brier, ROI, drift, calibration, feature importance, walk-forward training runs, one-click retraining |
 | **Data pipeline** | 32 harmonised sources, health, coverage, latency, reliability, job history, permission-aware collection, API-key slots, schedules |
 | **Performance** | Equity curve, drawdown, CLV, monthly ROI, ROI by sport and market, calibration audit, interactive staking simulator |
-| **Paper desk** | Full ledger of recorded selections, open exposure, P/L, settlement rules |
+| **Paper desk** | Ledger of the calls the board published, open exposure, P/L, settlement rules, CSV export |
 | **Research notes** | Feature-harmonisation matrix across all repos/sites, methodology, architecture, decision log |
 | **Commercial** | ₦5,000/month Pro plan, Trading Desk seats, Paystack-ready checkout contract, admin console with MRR, users, audit log and feature flags |
 
@@ -34,6 +34,8 @@ CaveBettor is an enterprise-grade prediction, odds-intelligence and bankroll-ana
 | Tennis | Match winner, set betting, total games, game handicap |
 | Ice hockey | 1X2 (60 min), moneyline incl. OT, puck line, total goals |
 | Baseball | Moneyline, run line, total runs |
+
+Interval markets (first half, periods, quarters, sets) are quoted before kick-off only. Once the clock starts the board prices the match, never an interval whose result the scoreboard has already settled.
 
 ---
 
@@ -286,6 +288,8 @@ GET  /api/predictions/:fixtureId
 GET  /api/odds/:fixtureId
 GET  /api/analysis/:fixtureId
 GET  /api/search?q=
+GET  /api/engine                     engine version, coverage, board floors, model registry
+GET  /api/paper/export               paper ledger as CSV (`?format=json` for JSON)
 GET  /api/providers/refresh          collector state, plan and last provider calls
 POST /api/providers/refresh          run a collection tick (sync secret or owner)
 GET  /api/providers/probe?sport=&mode=  one budgeted provider call, one sport

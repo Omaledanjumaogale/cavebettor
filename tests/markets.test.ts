@@ -122,6 +122,29 @@ describe('totals and handicap markets', () => {
     }
   });
 
+  it('takes interval markets off the board once the clock starts', () => {
+    // A first-half line after the interval whistle is a settled market with a
+    // price on it. Pricing it against the minutes that remain invented a
+    // 40-point edge that then appeared on the board and in the ledger.
+    for (const fixture of fixtures.filter((f) => f.status !== 'scheduled')) {
+      const card = getPrediction(fixture);
+      expect(card.markets.filter((m) => m.group === 'period' || m.group === 'sets')).toHaveLength(0);
+      for (const rec of card.recommendations) {
+        expect(/^(ht|h1|p[0-9]|q[0-9]|set1)/.test(rec.marketId ?? '')).toBe(false);
+      }
+    }
+  });
+
+  it('prices a published pick within reach of the market', () => {
+    // A price more than twelve points away from the model is a modelling
+    // mismatch, not a disagreement about the match.
+    for (const fixture of fixtures) {
+      for (const rec of getPrediction(fixture).recommendations) {
+        expect(rec.modelProbability - 1 / rec.odds).toBeLessThanOrEqual(0.12);
+      }
+    }
+  });
+
   it('keeps every period prior inside the model spread', () => {
     // A period total whose consensus view is built from a different spread than
     // the model quotes produces fake edges: the first-five-innings line once

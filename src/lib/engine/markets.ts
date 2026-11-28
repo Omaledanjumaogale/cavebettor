@@ -178,6 +178,11 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
   // the kick-off line while the model read the scoreboard, which showed up as a
   // 68-point 'edge' on a half-time team total.
   const live = fixture.status === 'live' || fixture.status === 'halftime';
+  // The interval whistle settles the first half. Quoting a first-half line
+  // after it has gone prices the whole half against a grid built only from
+  // the minutes that are left, which is how a settled market turns into a
+  // 40-point "edge". First-half lines are quoted before kick-off, period.
+  const firstHalfOpen = fixture.status === 'scheduled';
   const scored = fixture.score.home + fixture.score.away;
   // Live: the desk has the same scoreboard, so it only disagrees about the
   // remaining goals. Pre-match: it shrinks the fixture towards the league.
@@ -350,13 +355,17 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       mk(fixture, '1x2', 'match', 'Match result — 1X2', 'Full-time three-way result', [
         { label: `${hs} win`, probability: core.home }, { label: 'Draw', probability: core.draw }, { label: `${as} win`, probability: core.away }
       ]),
-      mk(fixture, 'ht', 'period', 'Half-time result', 'Result after the first 45 minutes', [
-        { label: `${hs} win`, probability: core.periods[0].home }, { label: 'Draw', probability: core.periods[0].draw }, { label: `${as} win`, probability: core.periods[0].away }
-      ]),
-      mk(fixture, 'htft', 'period', 'Half-time / full-time', 'Half-time result followed by full-time result', (() => {
-        const probs = htft(core.halves?.first ?? [], core.halves?.second ?? []);
-        return [`${hs}/${hs}`, `${hs}/Draw`, `${hs}/${as}`, `Draw/${hs}`, 'Draw/Draw', `Draw/${as}`, `${as}/${hs}`, `${as}/Draw`, `${as}/${as}`].map((label, i) => ({ label, probability: probs[i] ?? 0 }));
-      })()),
+      // Half-time result is built by `periodMarkets` with the other periods;
+      // pushing it here as well published the same market twice, labelled
+      // 'Draw' in one copy and 'Tie' in the other.
+      ...(firstHalfOpen
+        ? [
+            mk(fixture, 'htft', 'period', 'Half-time / full-time', 'Half-time result followed by full-time result', (() => {
+              const probs = htft(core.halves?.first ?? [], core.halves?.second ?? []);
+              return [`${hs}/${hs}`, `${hs}/Draw`, `${hs}/${as}`, `Draw/${hs}`, 'Draw/Draw', `Draw/${as}`, `${as}/${hs}`, `${as}/Draw`, `${as}/${as}`].map((label, i) => ({ label, probability: probs[i] ?? 0 }));
+            })())
+          ]
+        : []),
       mk(fixture, 'dc', 'match', 'Double chance', 'Two of the three results covered', [
         { label: `${hs} or draw`, probability: core.home + core.draw },
         { label: `${hs} or ${as}`, probability: core.home + core.away },
@@ -401,35 +410,36 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       gridHandicap(line, `Asian handicap ${hs}`, line === 0 ? 'Level ball; the draw is a push' : 'One-goal steps; whole lines push on the exact margin');
     }
 
-    // First-half totals ladder from the half-time expectation.
-    const firstHalf = core.periods[0];
-    const halfCells = core.halves?.first ?? [];
-    const halfOver = (line: number) =>
-      halfCells.length
-        ? clamp(halfCells.reduce((sum, c) => sum + (c.home + c.away > line ? c.probability : 0), 0), 0.02, 0.98)
-        : clamp(1 - normalCdf((line - firstHalf.total) / Math.max(0.35, Math.sqrt(firstHalf.total))), 0.02, 0.98);
-    const htLines = safeLineSet(firstHalf.total, Math.max(0.32, Math.sqrt(firstHalf.total) * 0.72), 0.5, { min: 0.5, count: 2 });
-    for (const line of [...htLines.over, ...htLines.under]) {
-      const over = halfOver(line);
-      if (over < 0.12 || over > 0.92) continue;
-      markets.push(mk(fixture, `htou${Math.round(line * 10)}`, 'period', `1st half total ${fmtLine(line)}`, 'Combined goals before the break', [
-        { label: `1st half over ${fmtLine(line)}`, probability: over, prior: priorOver(line, 0.45) },
-        { label: `1st half under ${fmtLine(line)}`, probability: 1 - over, prior: 1 - priorOver(line, 0.45) }
-      ]));
-    }
+    if (firstHalfOpen) {
+      const firstHalf = core.periods[0];
+      const halfCells = core.halves?.first ?? [];
+      const halfOver = (line: number) =>
+        halfCells.length
+          ? clamp(halfCells.reduce((sum, c) => sum + (c.home + c.away > line ? c.probability : 0), 0), 0.02, 0.98)
+          : clamp(1 - normalCdf((line - firstHalf.total) / Math.max(0.35, Math.sqrt(firstHalf.total))), 0.02, 0.98);
+      const htLines = safeLineSet(firstHalf.total, Math.max(0.32, Math.sqrt(firstHalf.total) * 0.72), 0.5, { min: 0.5, count: 2 });
+      for (const line of [...htLines.over, ...htLines.under]) {
+        const over = halfOver(line);
+        if (over < 0.12 || over > 0.92) continue;
+        markets.push(mk(fixture, `htou${Math.round(line * 10)}`, 'period', `1st half total ${fmtLine(line)}`, 'Combined goals before the break', [
+          { label: `1st half over ${fmtLine(line)}`, probability: over, prior: priorOver(line, 0.45) },
+          { label: `1st half under ${fmtLine(line)}`, probability: 1 - over, prior: 1 - priorOver(line, 0.45) }
+        ]));
+      }
 
-    // Half-time Asian handicap: the same cushion logic on the interval margin.
-    const halfMargin = (core.periods[0].home - core.periods[0].away) * 0.9;
-    const htAhLines = [1.5, 1, 0.5, 0, -0.5, -1, -1.5]
-      .filter((line) => Math.abs(line + halfMargin) >= 0.5)
-      .sort((a, b) => Math.abs(a + halfMargin) - Math.abs(b + halfMargin))
-      .slice(0, 2);
-    for (const line of htAhLines) {
-      const homeCovers = clamp(1 - normalCdf((-line - halfMargin) / 0.95), 0.02, 0.98);
-      markets.push(mk(fixture, `htah${Math.round(Math.abs(line) * 10)}${line < 0 ? 'n' : 'p'}`, 'handicap', `1st half Asian handicap ${hs} ${fmtLine(line)}`, 'First-half handicap; the interval draw can push', [
-        { label: `${hs} ${line > 0 ? '+' : ''}${fmtLine(line)}`, probability: homeCovers, prior: priorCover(line) },
-        { label: `${as} ${-line > 0 ? '+' : ''}${fmtLine(-line)}`, probability: 1 - homeCovers, prior: 1 - priorCover(line) }
-      ]));
+      // Half-time Asian handicap: the same cushion logic on the interval margin.
+      const halfMargin = (core.periods[0].home - core.periods[0].away) * 0.9;
+      const htAhLines = [1.5, 1, 0.5, 0, -0.5, -1, -1.5]
+        .filter((line) => Math.abs(line + halfMargin) >= 0.5)
+        .sort((a, b) => Math.abs(a + halfMargin) - Math.abs(b + halfMargin))
+        .slice(0, 2);
+      for (const line of htAhLines) {
+        const homeCovers = clamp(1 - normalCdf((-line - halfMargin) / 0.95), 0.02, 0.98);
+        markets.push(mk(fixture, `htah${Math.round(Math.abs(line) * 10)}${line < 0 ? 'n' : 'p'}`, 'handicap', `1st half Asian handicap ${hs} ${fmtLine(line)}`, 'First-half handicap; the interval draw can push', [
+          { label: `${hs} ${line > 0 ? '+' : ''}${fmtLine(line)}`, probability: homeCovers, prior: priorCover(line) },
+          { label: `${as} ${-line > 0 ? '+' : ''}${fmtLine(-line)}`, probability: 1 - homeCovers, prior: 1 - priorCover(line) }
+        ]));
+      }
     }
 
     // Team totals around each side's own expectation.
@@ -437,7 +447,7 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     teamTotal('away', core.expected.away, Math.max(0.5, sd * 0.8), `${as} goals`, { step: 0.5, min: 0.5, count: 2 }, as);
 
     markets.push(scoreMarket('Top projected full-time scorelines'));
-    periodMarkets(core.periods);
+    periodMarkets(firstHalfOpen ? core.periods : []);
   }
 
   if (fixture.sport === 'basketball') {
@@ -469,7 +479,23 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
     }
 
     // Totals ladder around the projected combined points (e.g. 156.5 … 234.5).
-    numericTotal('total', 'Total points', 'Combined points over / under including overtime', totalMean, totalSd, { step: 4.5, min: 40, count: 3 }, 'match');
+    // In-play the desk has the scoreboard too, so the consensus view is the
+    // points already in plus almost all of the rest; the old 0.85 shrink on
+    // the remainder priced a 76% over against a 53% prior and printed a
+    // 15-point edge on a line nobody was mispricing.
+    const pointsIn = fixture.score.home + fixture.score.away;
+    const totalPrior = live
+      ? pointsIn + 0.96 * Math.max(0, totalMean - pointsIn)
+      : 0.5 * totalMean + 0.5 * profile.total;
+    numericTotal(
+      'total',
+      'Total points',
+      'Combined points over / under including overtime',
+      totalMean,
+      totalSd,
+      { step: 4.5, min: 40, count: 3, priorMean: totalPrior, priorSd: totalSd },
+      'match'
+    );
 
     // First-half totals around half the projection.
     numericTotal(
@@ -627,6 +653,20 @@ export function buildMarkets(fixture: Fixture, core: MarketModel): Market[] {
       gamesSd,
       { step: 1, min: 12.5, count: 2, priorMean: 0.5 * gamesMean + 0.5 * formatGames, priorSd: gamesSd * 1.08 },
       'match'
+    );
+  }
+
+  // Interval markets are quoted before kick-off and taken down once the clock
+  // starts. In play we price the match, not the quarter: a first-half line
+  // after the interval whistle is a settled market with a price attached, and
+  // pricing it against the minutes that remain invents a 30-point edge.
+  if (fixture.status !== 'scheduled') {
+    // Period totals live in the 'totals' group, so the id carries the
+    // interval: h1total (basketball half), p1total (hockey period),
+    // f5total (first five innings), set1/set1games (tennis).
+    const interval = /^(ht|h1|p[1-9]|q[1-9]|f5|set1)/;
+    return markets.filter(
+      (market) => market.group !== 'period' && market.group !== 'sets' && !interval.test(market.id)
     );
   }
 
