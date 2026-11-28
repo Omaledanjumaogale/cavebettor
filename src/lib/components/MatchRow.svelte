@@ -5,6 +5,8 @@
   import { formatKickoff } from '#lib/format';
   import { ChevronRight, MapPin, Radio } from '@lucide/svelte';
   import TeamBadge from './TeamBadge.svelte';
+  import SportGlyph from './SportGlyph.svelte';
+  import KickoffClock from './KickoffClock.svelte';
   import TeamNameLink from './TeamNameLink.svelte';
   import ScoreProgression from './ScoreProgression.svelte';
 
@@ -39,12 +41,14 @@
     {:else}
       <div class="num text-[12px] font-bold text-white">{timeLabel}</div>
       <div class="mt-0.5 text-[9px] leading-tight text-fog-dim">{dayLabel}</div>
+      <div class="mt-0.5"><KickoffClock kickoff={fixture.kickoff} /></div>
     {/if}
   </div>
 
   <!-- Competition + teams -->
   <div class="min-w-0">
     <div class="mb-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9.5px] uppercase tracking-[0.08em] text-fog-dim">
+      <SportGlyph sport={fixture.sport} size="xs" />
       <span class="h-2 w-1 shrink-0 rounded-full" style={`background:${league?.colour}`}></span>
       <span class="truncate font-semibold text-fog">{league?.name ?? fixture.leagueId}</span>
       {#if league?.country}<span class="shrink-0">· {league.country}</span>{/if}

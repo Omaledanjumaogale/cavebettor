@@ -2,6 +2,8 @@
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { Sparkles, ShieldCheck, Filter, Search, CalendarDays, ChevronRight, Radio, TrendingUp, Info } from '@lucide/svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
+  import KickoffClock from '#lib/components/KickoffClock.svelte';
   import { formatKickoff, formatDate } from '#lib/format';
 
   let { data } = $props();
@@ -129,7 +131,10 @@
       {#each data.board.picks as pick (pick.fixtureId)}
         <a href={`/fixtures/${pick.fixtureId}`} class="panel panel-hover block p-3.5">
           <div class="flex items-center justify-between gap-2">
-            <span class="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-fog">{pick.league}</span>
+            <span class="flex min-w-0 items-center gap-1.5">
+              <SportGlyph sport={pick.sport} size="xs" />
+              <span class="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-fog">{pick.league}</span>
+            </span>
             <span class={tierChip(pick.tier)}>{(pick.modelProbability * 100).toFixed(1)}%</span>
           </div>
           <div class="mt-0.5 flex items-center gap-1 text-[9.5px] text-fog-dim">
@@ -139,6 +144,8 @@
             <span>{formatKickoff(pick.kickoff)}</span>
             {#if pick.status === 'live' || pick.status === 'halftime'}
               <span class="inline-flex items-center gap-0.5 text-mint"><Radio size={9} /> live</span>
+            {:else if pick.status === 'scheduled'}
+              <KickoffClock kickoff={pick.kickoff} />
             {/if}
           </div>
 

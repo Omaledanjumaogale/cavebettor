@@ -3,6 +3,8 @@
   import { onMount } from 'svelte';
   import { Radio, RefreshCw, ArrowUpRight, Activity, Sparkles, Clock, ChevronRight, Zap } from '@lucide/svelte';
   import TeamBadge from '#lib/components/TeamBadge.svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
+  import KickoffClock from '#lib/components/KickoffClock.svelte';
   import ProbabilityBar from '#lib/components/ProbabilityBar.svelte';
   import Sparkline from '#lib/components/Sparkline.svelte';
   import ConfidenceMeter from '#lib/components/ConfidenceMeter.svelte';
@@ -111,6 +113,7 @@
         <div class="panel overflow-hidden">
           <div class="flex items-center justify-between gap-2 border-b border-white/[0.06] px-4 py-2.5">
             <div class="flex min-w-0 items-center gap-2">
+              <SportGlyph sport={match.fixture.sport} size="xs" />
               <span class="h-3.5 w-1 rounded-full" style={`background:${match.league.colour}`}></span>
               <span class="truncate text-[10.5px] font-semibold uppercase tracking-[0.1em] text-fog">{match.league.name}</span>
               <span class="hidden truncate text-[10px] text-fog-dim sm:inline">· {match.fixture.venue}</span>
@@ -217,6 +220,7 @@
         <div class="space-y-1.5">
           {#each data.recent as match}
             <a href={`/fixtures/${match.fixture.id}`} class="flex items-center gap-2 rounded-lg px-1.5 py-2 text-[10.5px] transition hover:bg-white/[0.03]">
+              <SportGlyph sport={match.fixture.sport} size="xs" />
               <span class="h-5 w-1 rounded-full" style={`background:${match.league.colour}`}></span>
               <div class="min-w-0 flex-1">
                 <div class="truncate text-white/80">{match.home.name} vs {match.away.name}</div>
@@ -236,11 +240,13 @@
         <div class="space-y-1.5">
           {#each orderedUpcoming.slice(0, 5) as match}
             <a href={`/fixtures/${match.fixture.id}`} class={`flex items-center gap-2 rounded-lg px-1.5 py-2 text-[10.5px] transition hover:bg-white/[0.03] ${nextKickoff && match.fixture.id === nextKickoff.fixture.id ? 'bg-lime/[0.06]' : ''}`}>
-              <Clock size={11} class="shrink-0 text-fog-dim" />
+              <SportGlyph sport={match.fixture.sport} size="xs" />
               <div class="min-w-0 flex-1">
                 <div class="truncate text-white/80">{match.home.name} vs {match.away.name}</div>
-                <div class="text-[9px] text-fog-dim">
-                  {formatKickoff(match.fixture.kickoff)}{#if nextKickoff && match.fixture.id === nextKickoff.fixture.id} · next up{/if}
+                <div class="flex flex-wrap items-center gap-1.5 text-[9px] text-fog-dim">
+                  <span>{formatKickoff(match.fixture.kickoff)}</span>
+                  <KickoffClock kickoff={match.fixture.kickoff} />
+                  {#if nextKickoff && match.fixture.id === nextKickoff.fixture.id}<span class="text-lime">· next up</span>{/if}
                 </div>
               </div>
               <ChevronRight size={11} class="text-fog-dim" />

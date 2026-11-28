@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { ArrowLeft, ArrowUpRight, Sparkles, Bot, ShieldAlert, TrendingUp, MapPin, CloudSun, Users, BarChart3, Layers, GitCompareArrows, Star, Copy, Check, LoaderCircle, ChevronRight, Info, Target, Radio } from '@lucide/svelte';
   import TeamBadge from '#lib/components/TeamBadge.svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
+  import KickoffClock from '#lib/components/KickoffClock.svelte';
   import TeamNameLink from '#lib/components/TeamNameLink.svelte';
   import AddToBetslip from '#lib/components/AddToBetslip.svelte';
   import ProbabilityBar from '#lib/components/ProbabilityBar.svelte';
@@ -12,7 +14,7 @@
   import FormPills from '#lib/components/FormPills.svelte';
   import Sparkline from '#lib/components/Sparkline.svelte';
   import { fmtNgn, pct, signed } from '#lib/engine/core';
-  import { formatKickoff, formatDate, relativeTime, countdown } from '#lib/format';
+  import { formatKickoff, formatDate, relativeTime } from '#lib/format';
 
   let { data } = $props();
   const { fixture, prediction, home, away, league } = $derived(data);
@@ -116,6 +118,7 @@
     <div class="relative p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-2">
+          <SportGlyph sport={fixture.sport} size="md" />
           <span class="h-5 w-1.5 rounded-full" style={`background:${league.colour}`}></span>
           <span class="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-fog">
             {league.name}{#if league.country} · {league.country}{/if}{#if fixture.round} · {fixture.round}{/if}
@@ -125,7 +128,7 @@
           {:else if finished}
             <span class="chip">Full time</span>
           {:else}
-            <span class="chip chip-sky">Kick-off {countdown(fixture.kickoff)}</span>
+            <span class="chip chip-sky"><KickoffClock kickoff={fixture.kickoff} showLabel /></span>
           {/if}
         </div>
         <div class="flex items-center gap-3 text-[10.5px] text-fog-dim">

@@ -2,6 +2,8 @@
   import { goto } from '$app/navigation';
   import { Coins, ArrowUpRight, TrendingUp, TrendingDown, Scale, Info, ChevronRight, RefreshCw, Radio } from '@lucide/svelte';
   import TeamBadge from '#lib/components/TeamBadge.svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
+  import KickoffClock from '#lib/components/KickoffClock.svelte';
   import ProbabilityBar from '#lib/components/ProbabilityBar.svelte';
   import SectionHeader from '#lib/components/SectionHeader.svelte';
   import { fmtNgn, signed } from '#lib/engine/core';
@@ -45,12 +47,15 @@
   <div class="panel p-3 sm:p-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex min-w-0 items-center gap-3">
+        <SportGlyph sport={selected.fixture.sport} size="md" />
         <TeamBadge team={selected.home} size={38} />
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <div class="truncate text-[14px] font-semibold text-white">{selected.home.name} vs {selected.away.name}</div>
             {#if selected.fixture.status === 'live' || selected.fixture.status === 'halftime'}
               <span class="chip chip-rose !text-[9px]"><span class="live-dot h-1 w-1 rounded-full bg-rose"></span> {selected.fixture.minute}′ · {selected.fixture.score.home}–{selected.fixture.score.away}</span>
+            {:else if selected.fixture.status === 'scheduled'}
+              <KickoffClock kickoff={selected.fixture.kickoff} showLabel />
             {/if}
           </div>
           <div class="text-[10px] text-fog-dim">{selected.league.name} · {formatKickoff(selected.fixture.kickoff)} · {selected.fixture.round}</div>

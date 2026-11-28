@@ -28,6 +28,7 @@ import {
 } from './core';
 import { expectedScore } from './fixtures';
 import { buildMarkets } from './markets';
+import { screenSelection } from './screening';
 import { calibrateThreeWay, scoringProfile } from './scoring';
 
 const MAX_GOALS = 8;
@@ -971,7 +972,20 @@ function selectRecommendations(markets: Market[], fixture: Fixture): Candidate[]
   // Nothing below a 64% strike rate is published as a pick: the board exists
   // to project winners, not to fill space. The edge floor is 1% because the
   // bookmaker jitter is ±4.5% — anything under that is noise, not a signal.
-  return balanced.filter((row) => row.modelProbability >= 0.64 && row.edge >= 0.01).slice(0, 10);
+  // The screening layer adds the two rules that keep a board honest: a cap on
+  // the edge (a 40% "edge" is a stale price, not free money) and a 15-point
+  // cap on the model-versus-market gap (beyond that they describe different
+  // matches). Push-capable lines are discounted first.
+  return balanced
+    .filter((row) =>
+      screenSelection({
+        marketId: row.marketId,
+        selection: row.selection,
+        probability: row.modelProbability,
+        odds: row.odds
+      }).pass
+    )
+    .slice(0, 10);
 }
 
 function buildRecommendations(valueBets: ValueBet[], markets: Market[], fixture: Fixture): Recommendation[] {

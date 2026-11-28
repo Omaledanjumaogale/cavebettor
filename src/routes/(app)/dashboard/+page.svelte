@@ -4,6 +4,7 @@
   import LineChart from '#lib/components/LineChart.svelte';
   import Donut from '#lib/components/Donut.svelte';
   import MatchRow from '#lib/components/MatchRow.svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
   import SectionHeader from '#lib/components/SectionHeader.svelte';
   import Sparkline from '#lib/components/Sparkline.svelte';
   import Gauge from '#lib/components/Gauge.svelte';
@@ -411,6 +412,7 @@
     <div class="flex flex-wrap gap-1.5">
       {#each data.leagues as league}
         <a href={`/fixtures?league=${league.id}`} class="group flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 py-1.5 text-[10.5px] text-fog transition hover:border-lime/25 hover:text-white">
+          <SportGlyph sport={league.sport} size="xs" />
           <span class="h-2 w-2 rounded-sm" style={`background:${league.colour}`}></span>
           {league.name}
           <span class="text-fog-dim">{league.countryCode}</span>

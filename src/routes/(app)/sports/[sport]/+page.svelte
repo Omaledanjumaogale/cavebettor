@@ -6,6 +6,8 @@
   import ProbabilityBar from '#lib/components/ProbabilityBar.svelte';
   import ConfidenceMeter from '#lib/components/ConfidenceMeter.svelte';
   import TeamBadge from '#lib/components/TeamBadge.svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
+  import KickoffClock from '#lib/components/KickoffClock.svelte';
   import LineChart from '#lib/components/LineChart.svelte';
   import { formatKickoff } from '#lib/format';
 
@@ -129,11 +131,14 @@
             <a href={`/fixtures/${bet.fixtureId}`} class="group block rounded-xl border border-white/[0.06] bg-black/15 p-3 transition hover:border-lime/25 hover:bg-lime/[0.03]">
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 <span class="flex items-center gap-1.5 text-[10px] text-fog-dim">
+                  <SportGlyph sport={def.sport} size="xs" />
                   <span class="h-2 w-1 rounded-full" style={`background:${bet.leagueColour}`}></span>{bet.league}
                 </span>
                 <span class="num text-[10px] text-fog-dim">{formatKickoff(bet.kickoff)}</span>
                 {#if bet.status === 'live' || bet.status === 'halftime'}
                   <span class="chip chip-mint !px-1.5 !py-0 !text-[8px]"><Radio size={8} /> Live</span>
+                {:else}
+                  <KickoffClock kickoff={bet.kickoff} />
                 {/if}
                 <span class="ml-auto flex items-center gap-2">
                   <span class="num rounded-lg bg-white/[0.05] px-2 py-0.5 text-[12px] font-bold text-lime">{bet.odds.toFixed(2)}</span>

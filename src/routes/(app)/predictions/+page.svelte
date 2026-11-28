@@ -5,8 +5,10 @@
   import ConfidenceMeter from '#lib/components/ConfidenceMeter.svelte';
   import SectionHeader from '#lib/components/SectionHeader.svelte';
   import AddToBetslip from '#lib/components/AddToBetslip.svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
+  import KickoffClock from '#lib/components/KickoffClock.svelte';
   import { fmtNgn, signed, pct } from '#lib/engine/core';
-  import { formatKickoff, countdown } from '#lib/format';
+  import { formatKickoff } from '#lib/format';
 
   let { data } = $props();
 
@@ -81,9 +83,12 @@
         <a href={`/fixtures/${bet.fixtureId}`} class="panel panel-hover relative overflow-hidden p-4">
           <div class="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-lime/10 blur-2xl"></div>
           <div class="relative">
-            <div class="flex items-center justify-between">
-              <span class="chip !text-[9px]">#{i + 1} · {bet.league}</span>
-              <span class="num text-[9.5px] text-fog-dim">{countdown(bet.kickoff)} to KO</span>
+            <div class="flex items-center justify-between gap-2">
+              <span class="flex min-w-0 items-center gap-1.5">
+                <SportGlyph sport={bet.sport} size="xs" />
+                <span class="chip min-w-0 truncate !text-[9px]">#{i + 1} · {bet.league}</span>
+              </span>
+              <KickoffClock kickoff={bet.kickoff} />
             </div>
             <div class="mt-3 truncate text-[10.5px] text-fog">{bet.home} vs {bet.away}</div>
             <div class="mt-0.5 display text-[16px] font-bold leading-snug text-white">{bet.selection}</div>
@@ -124,6 +129,7 @@
                 <tr class="cursor-pointer" onclick={() => goto(`/fixtures/${bet.fixtureId}`)}>
                   <td>
                     <div class="flex items-center gap-2">
+                      <SportGlyph sport={bet.sport} size="xs" />
                       <span class="h-4 w-1 shrink-0 rounded-full" style={`background:${bet.leagueColour}`}></span>
                       <div class="min-w-0">
                         <div class="truncate text-[11.5px] font-medium text-white">{bet.home} vs {bet.away}</div>

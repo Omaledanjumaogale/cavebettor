@@ -13,7 +13,7 @@ CaveBettor is an enterprise-grade prediction, odds-intelligence and bankroll-ana
 | Area | Capability |
 | --- | --- |
 | **Command centre** | Live KPIs, bankroll curve, model health, market movers, pipeline health, league coverage, analyst briefing |
-| **Fixtures** | 20 competitions, 5 sports, date grouping, sport/league/status/value filters, card and table views |
+| **Fixtures** | 20 competitions, 5 sports, date grouping, sport/league/status/value filters, a sport glyph on every fixture, live kick-off countdowns, card and table views |
 | **Match lab** | Probability split, value table, correct-score heatmap, totals, top scorelines, model decomposition, H2H, lineups, live stats, LLM analyst |
 | **Live centre** | In-play re-pricing every 30 seconds, live edges, probability drift, recent results, upcoming strip |
 | **Value board** | Every selection above the 2.5% edge threshold, ranked, with quarter-Kelly stakes and a three-leg accumulator idea |
@@ -36,6 +36,12 @@ CaveBettor is an enterprise-grade prediction, odds-intelligence and bankroll-ana
 | Baseball | Moneyline, run line, total runs |
 
 Interval markets (first half, periods, quarters, sets) are quoted before kick-off only. Once the clock starts the board prices the match, never an interval whose result the scoreboard has already settled.
+
+### Fixture calendar and score board
+
+Fixtures are generated from a fixed UTC calendar: every competition plays two matches a day in one of twelve two-hour kick-off slots, and each fixture's seed is its league, teams and **kick-off timestamp**. A match therefore keeps its id, its score script and its final score for as long as it is in the 96-hour window — refreshing the board an hour later shows the same match further along, never a new match with a new result.
+
+The final score is sampled from the same distribution the model prices (Poisson for football and hockey, a rounded normal for basketball and baseball, a best-of-three set script for tennis), then dealt across the periods as a monotonic timeline. A match that finishes 3–1 keeps 3–1 on every surface, and its half-time or quarter line always adds up to that final.
 
 ---
 
@@ -327,7 +333,7 @@ Full detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Source harmonisatio
 2. Generate a sport-specific score distribution.
 3. Blend statistical, machine-learning and market components.
 4. Calibrate; cap divergence from the market prior unless features justify it.
-5. Compute edge = `model probability × best price − 1`; keep edges ≥ 2.5%.
+5. Compute edge = `model probability × best price − 1`; keep edges ≥ 2.5%, then screen every published call: strike rate ≥ 64%, edge between 1% and 25%, and a model-versus-market gap no wider than 15 points. Whole-number lines are discounted for the push before screening.
 6. Size with quarter-Kelly, capped at 5% of bankroll.
 7. Record at the best price, then measure closing-line value and calibration after settlement.
 

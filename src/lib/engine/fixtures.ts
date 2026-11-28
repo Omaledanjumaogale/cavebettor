@@ -7,9 +7,9 @@ import { scoringProfile } from './scoring';
 const HOUR = 3600_000;
 
 export const SPORT_DURATION_MIN: Record<SportId, number> = {
-  football: 115,
-  basketball: 150,
-  tennis: 145,
+  football: 108,
+  basketball: 144,
+  tennis: 144,
   icehockey: 150,
   baseball: 190
 };
@@ -143,90 +143,183 @@ export function expectedScore(sport: SportId, home: Team, away: Team, homeAdv = 
 }
 
 
-/**
- * Distribute a score across the periods of a sport. Deterministic per seed so
- * a fixture never changes its half-time score between requests.
- */
-function progressiveScore(sport: SportId, score: { home: number; away: number }, seed: string): Fixture['periods'] {
-  if (score.home + score.away <= 0) return undefined;
-  const split = (total: number, weights: number[]) => {
-    const raw = weights.map((w) => total * w);
-    const floors = raw.map((v) => Math.floor(v));
-    let remainder = total - floors.reduce((a, b) => a + b, 0);
-    const order = raw.map((v, i) => ({ i, frac: v - Math.floor(v) })).sort((a, b) => b.frac - a.frac);
-    for (const { i } of order) {
-      if (remainder <= 0) break;
-      floors[i] += 1;
-      remainder -= 1;
-    }
-    return floors;
-  };
-  const weightsFor = (count: number) => {
-    const raw = Array.from({ length: count }, (_, i) => 0.6 + seeded(`${seed}-p${i}`) * 0.8);
-    const sum = raw.reduce((a, b) => a + b, 0);
-    return raw.map((v) => v / sum);
-  };
+type PeriodLine = { label: string; home: number; away: number };
 
-  if (sport === 'football') {
-    const [h1] = split(score.home, [0.44, 0.56]);
-    const [a1] = split(score.away, [0.44, 0.56]);
-    return [{ label: 'Half time', home: h1, away: a1 }];
-  }
-  if (sport === 'basketball') {
-    const hw = weightsFor(4);
-    const aw = weightsFor(4);
-    const hs = split(score.home, hw);
-    const as = split(score.away, aw);
-    return [
-      { label: 'Half time', home: hs[0] + hs[1], away: as[0] + as[1] },
-      ...hs.map((v, i) => ({ label: `Q${i + 1}`, home: v, away: as[i] }))
-    ];
-  }
-  if (sport === 'icehockey') {
-    const hs = split(score.home, weightsFor(3));
-    const as = split(score.away, weightsFor(3));
-    return hs.map((v, i) => ({ label: `Period ${i + 1}`, home: v, away: as[i] }));
-  }
-  if (sport === 'baseball') {
-    const hs = split(score.home, weightsFor(9));
-    const as = split(score.away, weightsFor(9));
-    return [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ label: `Inn ${n}`, home: hs[n - 1], away: as[n - 1] }));
-  }
-  if (sport === 'tennis') {
-    const best = 3;
-    const sets = Array.from({ length: best }, (_, i) => {
-      const winner = seeded(`${seed}-set${i}`) > 0.5 ? 'home' : 'away';
-      return { label: `Set ${i + 1}`, home: winner === 'home' ? 6 : 4, away: winner === 'home' ? 4 : 6 };
-    });
-    return sets;
-  }
-  return undefined;
+interface MatchScript {
+  final: { home: number; away: number };
+  periods: PeriodLine[];
+  /** Score at a wall-clock minute after kick-off; monotonic, exact at full time. */
+  scoreAt: (elapsed: number) => { home: number; away: number };
+  /** Period scores that have actually happened by that minute. */
+  periodsAt: (elapsed: number) => PeriodLine[];
 }
 
-function finalScore(sport: SportId, expected: { home: number; away: number }, seed: string) {
-  const rand = mulberry32(hashString(seed));
-  if (sport === 'football' || sport === 'icehockey') {
-    const poisson = (l: number) => {
-      const L = Math.exp(-l);
-      let k = 0;
-      let p = 1;
-      do {
-        k++;
-        p *= rand();
-      } while (p > L);
-      return k - 1;
-    };
-    return { home: poisson(expected.home), away: poisson(expected.away) };
+/** Wall-clock windows the score is dealt into, in minutes after kick-off. */
+function scoreWindows(sport: SportId): { label: string; start: number; end: number }[] {
+  if (sport === 'football') {
+    return [
+      { label: '1st half', start: 0, end: 45 },
+      { label: '2nd half', start: 60, end: 105 }
+    ];
   }
   if (sport === 'basketball') {
-    const gauss = (mean: number, sd: number) => Math.max(60, Math.round(mean + sd * Math.sqrt(-2 * Math.log(rand() + 1e-9)) * Math.cos(2 * Math.PI * rand())));
-    return { home: gauss(expected.home, 10.5), away: gauss(expected.away, 10.5) };
+    return [0, 1, 2, 3].map((i) => ({ label: `Q${i + 1}`, start: i * 36, end: (i + 1) * 36 }));
+  }
+  if (sport === 'icehockey') {
+    return [0, 1, 2].map((i) => ({ label: `Period ${i + 1}`, start: i * 50, end: (i + 1) * 50 }));
   }
   if (sport === 'baseball') {
-    const gauss = (mean: number, sd: number) => Math.max(0, Math.round(mean + sd * Math.sqrt(-2 * Math.log(rand() + 1e-9)) * Math.cos(2 * Math.PI * rand())));
-    return { home: gauss(expected.home, 2.6), away: gauss(expected.away, 2.6) };
+    return Array.from({ length: 9 }, (_, i) => ({ label: `Inn ${i + 1}`, start: i * 21, end: (i + 1) * 21 }));
+  }
+  return [0, 1, 2].map((i) => ({ label: `Set ${i + 1}`, start: i * 48, end: (i + 1) * 48 }));
+}
+
+/** Split an integer total across parts, largest-remainder so the sum is exact. */
+function deal(total: number, parts: number, rand: () => number): number[] {
+  const weights = Array.from({ length: parts }, () => 0.6 + rand() * 0.8);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const raw = weights.map((w) => (total * w) / sum);
+  const counts = raw.map((v) => Math.floor(v));
+  let remainder = total - counts.reduce((a, b) => a + b, 0);
+  const order = raw.map((v, i) => ({ i, frac: v - Math.floor(v) })).sort((a, b) => b.frac - a.frac);
+  for (const { i } of order) {
+    if (remainder <= 0) break;
+    counts[i] += 1;
+    remainder -= 1;
+  }
+  return counts;
+}
+
+/** Minutes inside a window at which a goal/point lands, sorted. */
+function moments(count: number, start: number, end: number, rand: () => number): number[] {
+  return Array.from({ length: count }, () => start + 0.5 + rand() * Math.max(0.5, end - start - 1)).sort((a, b) => a - b);
+}
+
+/** A Poisson draw; the score a model with these goal expectancies really produces. */
+function poissonDraw(lambda: number, rand: () => number, cap = 9): number {
+  const L = Math.exp(-Math.max(0.04, lambda));
+  let k = 0;
+  let pass = 1;
+  do {
+    k += 1;
+    pass *= rand();
+  } while (pass > L && k < cap);
+  return Math.min(cap, k - 1);
+}
+
+/** A rounded normal draw for the scoring sports where a goal is a point. */
+function gaussDraw(mean: number, sd: number, rand: () => number, floor = 0): number {
+  const u = Math.max(1e-9, rand());
+  const value = mean + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+  return Math.max(floor, Math.round(value));
+}
+
+function sampleFinal(sport: SportId, expected: { home: number; away: number }, rand: () => number) {
+  if (sport === 'football' || sport === 'icehockey') {
+    return { home: poissonDraw(expected.home, rand), away: poissonDraw(expected.away, rand) };
+  }
+  if (sport === 'basketball') {
+    return { home: gaussDraw(expected.home, 10.5, rand, 60), away: gaussDraw(expected.away, 10.5, rand, 60) };
+  }
+  if (sport === 'baseball') {
+    return { home: gaussDraw(expected.home, 2.6, rand, 0), away: gaussDraw(expected.away, 2.6, rand, 0) };
   }
   return { home: 2, away: 1 };
+}
+
+function tennisScript(expected: { home: number; away: number }, seed: string): MatchScript {
+  const rand = mulberry32(hashString(`${seed}-sets`));
+  const strength = clamp(expected.home / Math.max(0.2, expected.home + expected.away), 0.12, 0.88);
+  const windows = scoreWindows('tennis');
+  const periods: PeriodLine[] = [];
+  let homeSets = 0;
+  let awaySets = 0;
+  for (let i = 0; i < 3 && homeSets < 2 && awaySets < 2; i++) {
+    const homeWins = rand() < strength;
+    // 7-5 or a 6-x scoreline; the loser never reaches six.
+    const tight = rand() < 0.32;
+    const loser = tight ? 5 : Math.floor(rand() * 5);
+    periods.push(
+      homeWins
+        ? { label: `Set ${i + 1}`, home: tight ? 7 : 6, away: loser }
+        : { label: `Set ${i + 1}`, home: loser, away: tight ? 7 : 6 }
+    );
+    if (homeWins) homeSets += 1;
+    else awaySets += 1;
+  }
+  const final = {
+    home: periods.filter((p) => p.home > p.away).length,
+    away: periods.filter((p) => p.away > p.home).length
+  };
+  const finishedSets = (elapsed: number) => windows.filter((w) => elapsed >= w.end).length;
+  const scoreAt = (elapsed: number) => {
+    const done = periods.slice(0, finishedSets(elapsed));
+    return { home: done.filter((p) => p.home > p.away).length, away: done.filter((p) => p.away > p.home).length };
+  };
+  const periodsAt = (elapsed: number): PeriodLine[] => {
+    const done = finishedSets(elapsed);
+    const lines = periods.slice(0, done).map((p) => ({ ...p }));
+    const current = periods[done];
+    const window = windows[done];
+    if (current && window) {
+      const progress = clamp((elapsed - window.start) / (window.end - window.start), 0, 1);
+      // Games accumulate through the set; the scoreline only lands at the end.
+      lines.push({
+        label: current.label,
+        home: Math.min(current.home, Math.floor(current.home * progress)),
+        away: Math.min(current.away, Math.floor(current.away * progress))
+      });
+    }
+    return lines;
+  };
+  return { final, periods, scoreAt, periodsAt };
+}
+
+/**
+ * One deterministic match script per fixture: the final score, the periods it
+ * is built from, and the score on the board at any minute. The score only ever
+ * moves forward and always lands on the final, so a match that finished 3-1 can
+ * never be shown as 1-1 an hour later.
+ */
+function buildScript(sport: SportId, expected: { home: number; away: number }, seed: string): MatchScript {
+  if (sport === 'tennis') return tennisScript(expected, seed);
+  const rand = mulberry32(hashString(`${seed}-script`));
+  const windows = scoreWindows(sport);
+  // Sample the final from the same distribution the model prices, then deal
+  // it across the periods. Rounding the expectation would have produced
+  // "every match has two goals", which is not what the model says.
+  const sampled = sampleFinal(sport, expected, rand);
+  const homeCounts = deal(sampled.home, windows.length, rand);
+  const awayCounts = deal(sampled.away, windows.length, rand);
+  const homeTimeline = windows.flatMap((w, i) => moments(homeCounts[i], w.start, w.end, rand));
+  const awayTimeline = windows.flatMap((w, i) => moments(awayCounts[i], w.start, w.end, rand));
+  const fullPeriods: PeriodLine[] = windows.map((w, i) => ({
+    label: sport === 'football' ? 'Half time' : w.label,
+    home: homeCounts[i],
+    away: awayCounts[i]
+  }));
+  const final = {
+    home: homeCounts.reduce((a, b) => a + b, 0),
+    away: awayCounts.reduce((a, b) => a + b, 0)
+  };
+  const count = (list: number[], elapsed: number) => list.filter((m) => m <= elapsed).length;
+  const scoreAt = (elapsed: number) => ({ home: count(homeTimeline, elapsed), away: count(awayTimeline, elapsed) });
+  const periodsAt = (elapsed: number): PeriodLine[] => {
+    if (sport === 'football') {
+      if (elapsed < 45) return [];
+      return [{ label: 'Half time', home: count(homeTimeline, 45), away: count(awayTimeline, 45) }];
+    }
+    return windows
+      .filter((w) => elapsed > w.start)
+      .map((w) => ({
+        label: w.label,
+        home: count(homeTimeline, Math.min(elapsed, w.end)),
+        away: count(awayTimeline, Math.min(elapsed, w.end))
+      }));
+  };
+  // Football shows the half-time line only; the other sports show every period.
+  const periods = sport === 'football' ? fullPeriods.slice(0, 1) : fullPeriods;
+  return { final, periods, scoreAt, periodsAt };
 }
 
 function liveStats(sport: SportId, fixture: Fixture, seed: string) {
@@ -283,36 +376,52 @@ function h2h(home: Team, away: Team, seed: string) {
   return { homeWins, draws, awayWins, last };
 }
 
+/**
+ * Match clock as the boards read it: football and hockey show the playing
+ * minute, the other sports the wall clock since kick-off.
+ */
+function matchClock(sport: SportId, elapsed: number): { halftime: boolean; minute: number } {
+  if (sport === 'football') {
+    if (elapsed < 45) return { halftime: false, minute: Math.max(1, Math.round(elapsed)) };
+    if (elapsed < 60) return { halftime: true, minute: 45 };
+    return { halftime: false, minute: Math.min(95, Math.round(elapsed - 15)) };
+  }
+  if (sport === 'icehockey') {
+    return { halftime: false, minute: clamp(Math.round((elapsed / SPORT_DURATION_MIN.icehockey) * 90), 1, 90) };
+  }
+  return { halftime: false, minute: Math.max(1, Math.round(elapsed)) };
+}
+
 function makeFixture(leagueId: string, home: Team, away: Team, kickoff: Date, round: string, now: number): Fixture {
   const league = LEAGUE_MAP[leagueId];
   const sport = league.sport;
+  // Calendar kick-offs hold the seed still: same id, same script, same final
+  // score for as long as the fixture is in the window.
+  const seed = `${leagueId}-${home.id}-${away.id}-${kickoff.toISOString()}`;
+  const expected = expectedScore(sport, home, away, 1.06);
+  const script = buildScript(sport, expected, seed);
+  const final = script.final;
   const duration = SPORT_DURATION_MIN[sport];
   const elapsed = (now - kickoff.getTime()) / 60000;
-  const seed = `${leagueId}-${home.id}-${away.id}-${kickoff.toISOString().slice(0, 13)}`;
-  const expected = expectedScore(sport, home, away, 1.06);
-  const final = finalScore(sport, expected, seed);
 
   let status: FixtureStatus = 'scheduled';
   let minute: number | undefined;
   let score = { home: 0, away: 0 };
+  let periods: Fixture['periods'];
 
-  if (elapsed >= duration + 8) {
+  if (elapsed >= duration) {
     status = 'finished';
     score = final;
     minute = 90;
+    periods = script.periods;
   } else if (elapsed >= 0) {
-    status = elapsed > duration * 0.52 && sport === 'football' ? 'halftime' : 'live';
-    minute = Math.max(1, Math.min(Math.round(duration * 0.92), Math.round((elapsed / duration) * 100)));
-    const progress = clamp(elapsed / duration, 0, 1);
-    const liveH = Math.min(final.home, Math.round(final.home * progress + seeded(seed + 'h') * 0.9));
-    const liveA = Math.min(final.away, Math.round(final.away * progress + seeded(seed + 'a') * 0.7));
-    score = { home: liveH, away: liveA };
+    const clock = matchClock(sport, elapsed);
+    status = clock.halftime ? 'halftime' : 'live';
+    minute = clock.minute;
+    score = script.scoreAt(elapsed);
+    const shown = script.periodsAt(elapsed);
+    periods = shown.length ? shown : undefined;
   }
-
-  // Progressive scores: split the total into the periods the sport plays,
-  // so "1-0 at half time" and "22-18 after the first quarter" are readable
-  // even on engine fixtures.
-  const periods = progressiveScore(sport, score, seed);
 
   const fixture: Fixture = {
     id: `fx_${hashString(seed).toString(36)}`,
@@ -337,40 +446,65 @@ function makeFixture(leagueId: string, home: Team, away: Team, kickoff: Date, ro
   if (status === 'live' || status === 'halftime') {
     fixture.stats = liveStats(sport, fixture, seed + 'stats');
   }
+  if (status === 'finished') {
+    // Stamp the whistle against the same duration that produced the score, so
+    // the result archive and the board agree on when the match ended.
+    fixture.finishedAt = new Date(kickoff.getTime() + duration * 60_000).toISOString();
+  }
   return fixture;
 }
 
-/** Generate the rolling fixture universe, anchored to `now`. */
+const DAY_MS = 24 * HOUR;
+const SCHEDULE_DAYS = [-1, 0, 1, 2];
+/**
+ * Twelve two-hour windows. With matches lasting a little over two hours the
+ * next window starts before the previous one empties, so the live board is
+ * never blank in the middle of the day.
+ */
+const KICKOFF_SLOTS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22];
+
+/**
+ * Generate the fixture universe from a fixed calendar.
+ *
+ * Every competition plays two matches a day in one of eight three-hour slots,
+ * and the kick-off is a real calendar timestamp. That is what makes a match a
+ * match: the id, the final score and the goal script are pinned to the
+ * kick-off, so refreshing the board an hour later shows the same fixture
+ * further along, not a new fixture with a new score.
+ */
 export function generateFixtures(now = Date.now()): Fixture[] {
   const fixtures: Fixture[] = [];
-  const base = new Date(now);
-  base.setMinutes(0, 0, 0);
-  const offsets = [-27, -2.4, -0.55, 2.5, 27, 51, 75, 99];
+  const midnight = new Date(now);
+  midnight.setUTCHours(0, 0, 0, 0);
+  const today = Math.floor(midnight.getTime() / DAY_MS);
 
   LEAGUES.forEach((league, li) => {
     const teams = TEAMS.filter((t) => t.leagueId === league.id);
     if (teams.length < 2) return;
-    const rand = mulberry32(hashString(league.id + new Date(now).toISOString().slice(0, 10)));
-    const count = Math.min(6, teams.length);
-    for (let i = 0; i < count; i++) {
-      const home = teams[i % teams.length];
-      const away = teams[(i + 1 + (i % 2)) % teams.length];
-      if (home.id === away.id) continue;
-      const slot = offsets[(li + i) % offsets.length];
-      const kickoff = new Date(base.getTime() + slot * HOUR - rand() * 18 * 60000);
-      const round =
-        league.sport === 'football'
-          ? `Matchday ${28 + ((li + i) % 6)}`
-          : league.sport === 'basketball'
-            ? `Regular season · Game ${42 + i}`
-            : league.sport === 'tennis'
-              ? i % 2 === 0
-                ? 'Quarter-final'
-                : 'Semi-final'
-              : league.sport === 'icehockey'
-                ? `Game ${34 + i}`
-                : `Series game ${i + 1}`;
-      fixtures.push(makeFixture(league.id, home, away, kickoff, round, now));
+    for (const offset of SCHEDULE_DAYS) {
+      const day = today + offset;
+      const rand = mulberry32(hashString(`${league.id}-${day}`));
+      const perDay = Math.min(2, teams.length);
+      for (let i = 0; i < perDay; i++) {
+        const slot = KICKOFF_SLOTS[(li * 2 + i + day * 5 + 24) % KICKOFF_SLOTS.length];
+        const kickoff = new Date(day * DAY_MS + (slot * 60 + Math.floor(rand() * 15)) * 60_000);
+        const home = teams[(day + i * 2) % teams.length];
+        const away = teams[(day + i * 2 + 1) % teams.length];
+        if (home.id === away.id) continue;
+        const round =
+          league.sport === 'football'
+            ? `Matchday ${28 + ((day + i) % 6)}`
+            : league.sport === 'basketball'
+              ? `Regular season · Game ${42 + ((day + i) % 30)}`
+              : league.sport === 'tennis'
+                ? i % 2 === 0
+                  ? 'Quarter-final'
+                  : 'Semi-final'
+                : league.sport === 'icehockey'
+                  ? `Game ${34 + ((day + i) % 40)}`
+                  : `Series game ${i + 1}`;
+        fixtures.push(makeFixture(league.id, home, away, kickoff, round, now));
+      }
     }
   });
 
@@ -379,9 +513,12 @@ export function generateFixtures(now = Date.now()): Fixture[] {
 
 let cached: { at: number; fixtures: Fixture[] } | null = null;
 
+/** The live centre refreshes every 30s, so the engine cache matches it. */
+const FIXTURE_CACHE_MS = 30_000;
+
 export function getFixtures(): Fixture[] {
   const now = Date.now();
-  if (!cached || now - cached.at > 60_000) {
+  if (!cached || now - cached.at > FIXTURE_CACHE_MS) {
     cached = { at: now, fixtures: generateFixtures(now) };
   }
   return cached.fixtures;

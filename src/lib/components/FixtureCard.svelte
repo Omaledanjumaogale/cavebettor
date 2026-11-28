@@ -5,6 +5,8 @@
   import type { PredictionCard } from '#lib/snapshot';
   import { countdown, formatDate, formatKickoff, formatTime } from '#lib/format';
   import TeamBadge from './TeamBadge.svelte';
+  import SportGlyph from './SportGlyph.svelte';
+  import KickoffClock from './KickoffClock.svelte';
   import ProbabilityBar from './ProbabilityBar.svelte';
   import ScoreProgression from './ScoreProgression.svelte';
   import ConfidenceMeter from './ConfidenceMeter.svelte';
@@ -25,6 +27,7 @@
 >
   <div class="mb-1 flex items-center justify-between gap-2">
     <div class="flex min-w-0 items-center gap-2">
+      <SportGlyph sport={fixture.sport} />
       <span class="h-4 w-1 shrink-0 rounded-full" style={`background:${league?.colour ?? '#c9ff4d'}`}></span>
       <span class="truncate text-[10.5px] font-semibold uppercase tracking-[0.08em] text-fog">
         {league?.name ?? fixture.leagueId}
@@ -38,7 +41,7 @@
     {:else if finished}
       <span class="chip shrink-0 !py-0.5">Full time</span>
     {:else}
-      <span class="shrink-0 text-right text-[10.5px] font-medium text-fog">{formatKickoff(fixture.kickoff)}</span>
+      <KickoffClock kickoff={fixture.kickoff} />
     {/if}
   </div>
 

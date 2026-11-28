@@ -1,6 +1,8 @@
 <script lang="ts">
   import { ArrowLeft, CalendarDays, ChevronRight, CircleDot, Radio, TrendingUp } from '@lucide/svelte';
   import TeamBadge from '#lib/components/TeamBadge.svelte';
+  import SportGlyph from '#lib/components/SportGlyph.svelte';
+  import KickoffClock from '#lib/components/KickoffClock.svelte';
   import { formatKickoff, relativeTime } from '#lib/format';
 
   let { data } = $props();
@@ -25,7 +27,7 @@
               <span class="chip !px-2 !py-0.5 !text-[10px]"><span class="h-1.5 w-1.5 rounded-full" style={`background:${league.colour}`}></span>{league.name}</span>
               <span>{league.country}</span>
             {/if}
-            <span class="chip !px-2 !py-0.5 !text-[10px]">{team.sport}</span>
+            <span class="chip !px-2 !py-0.5 !text-[10px]"><SportGlyph sport={team.sport} size="xs" showLabel /></span>
           </div>
         </div>
       </div>
@@ -70,11 +72,11 @@
           <a href={`/fixtures/${row.id}`} class="flex items-center justify-between gap-3 border-b border-white/[0.04] px-3.5 py-2.5 transition hover:bg-white/[0.03]">
             <div class="min-w-0">
               <div class="truncate text-[12px] text-white">{row.home} <span class="text-fog-dim">vs</span> {row.away}</div>
-              <div class="truncate text-[10px] text-fog-dim">{row.league} · {row.country}</div>
+              <div class="flex items-center gap-1.5 truncate text-[10px] text-fog-dim"><SportGlyph sport={team.sport} size="xs" />{row.league} · {row.country}</div>
             </div>
             <div class="shrink-0 text-right">
               <div class="num text-[11.5px] text-white">{formatKickoff(row.kickoff)}</div>
-              <div class="text-[9.5px] text-fog-dim">{row.status}</div>
+              <div class="mt-0.5 text-[9.5px] text-fog-dim"><KickoffClock kickoff={row.kickoff} /></div>
             </div>
             <ChevronRight size={12} class="shrink-0 text-fog-dim" />
           </a>
@@ -94,7 +96,7 @@
           <a href={`/fixtures/${row.id}`} class="flex items-center justify-between gap-3 border-b border-white/[0.04] px-3.5 py-2.5 transition hover:bg-white/[0.03]">
             <div class="min-w-0">
               <div class="truncate text-[12px] text-white">{row.home} <span class="text-fog-dim">vs</span> {row.away}</div>
-              <div class="truncate text-[10px] text-fog-dim">{row.league}</div>
+              <div class="flex items-center gap-1.5 truncate text-[10px] text-fog-dim"><SportGlyph sport={team.sport} size="xs" />{row.league}</div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
               {#if row.status === 'live' || row.status === 'halftime'}

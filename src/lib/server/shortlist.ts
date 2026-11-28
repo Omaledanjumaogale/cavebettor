@@ -14,7 +14,7 @@
  * Anything that does not clear every gate is simply not published. The board is
  * cached per day, so each day's shortlist accumulates in R2 as an archive.
  */
-import type { Fixture, Prediction, Recommendation } from '#lib/types';
+import type { Fixture, Prediction, Recommendation, SportId } from '#lib/types';
 import { fixtureLeague, homeTeam, awayTeam } from '#lib/data/registry';
 import { getPrediction } from '#lib/engine/predictions';
 import { readCache, writeCache } from '#lib/server/cache';
@@ -26,7 +26,7 @@ const ARCHIVE_DAYS = 21;
 
 export interface ShortlistPick {
   fixtureId: string;
-  sport: string;
+  sport: SportId;
   leagueId: string;
   league: string;
   country: string;

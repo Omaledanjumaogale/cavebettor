@@ -31,6 +31,7 @@ Seventeen public GitHub repositories and ten public analytics websites were supp
 | `gmalbert/baseball-predictions` | Daily MLB predictions, live odds, backtests, bankroll charts | Baseball markets and bankroll presentation |
 | `JonJonz7/sports-betting-analytics` | Walk-forward model-vs-market edge, calibration, ROI attribution | Calibration and performance analytics |
 | `openbookie/sportbook` | Open bookmaker ledger and settlement | Paper-ledger settlement rules |
+| `Omaledanjumaogale/PuntersEdge` | Dixon–Coles score matrices, market-anchored goal fitting, decision screener, trained football artifacts | Decision screening (strike, edge cap, model-vs-market gap, push discount) and score-script realism; see decision log |
 
 ### Website evidence register
 
@@ -68,7 +69,7 @@ This lets the value board, odds comparison, paper desk, calibration audit and AP
 | Basketball probabilities | NBA_AI, NBA-ML | Normal margin/total model with sport-specific SDs |
 | Tennis probabilities | tennisbrain | Elo + best-of-five amplification |
 | Hockey & baseball | oddshub, baseball-predictions | Shot-volume Poisson / run-environment Poisson |
-| Value detection | sports-betting (georgedouzas), WagerBrain | Edge threshold + quarter-Kelly |
+| Value detection | sports-betting (georgedouzas), WagerBrain, PuntersEdge | Edge threshold + quarter-Kelly, then PuntersEdge-style screening: edge cap 25%, model-versus-market gap cap 15 points, push discount on whole lines |
 | Calibration | sports-betting-analytics | Reliability buckets, Brier, log-loss, drift |
 | Model lifecycle | sports-betting, NBA_AI | Registry, shadow mode, walk-forward gate, rollback |
 | Bankroll analytics | baseball-predictions, sports-betting-analytics | Equity curve, drawdown, CLV, monthly attribution |
@@ -113,6 +114,16 @@ This lets the value board, odds comparison, paper desk, calibration audit and AP
 4. **Cloudflare Pages** deployment as requested, using the last adapter line that supports Pages.
 5. **No chart library** — custom SVG charts keep the bundle lean and the aesthetic consistent.
 6. **Honest boundaries** — every surface states that CaveBettor is not a sportsbook and does not guarantee winnings.
+
+### Decision log — PuntersEdge audit (November 2026)
+
+PuntersEdge was read as a reference implementation, not copied: its Dixon–Coles matrix, market-anchored parameter fitting and decision screener were compared with CaveBettor's own engine line by line.
+
+- **Adopted — decision screening.** A call is published only when its strike rate is at least 64%, its edge sits between 1% and 25%, and the model-versus-market gap is no wider than 15 points. Whole-number lines are discounted for the push first (4.5%), because a result can land exactly on the line. The cap on edge is the important one: an edge above 25% is a stale price or a drifted model, not free money.
+- **Adopted — one score script per fixture.** The final score is now sampled from the same distribution the model prices and dealt across periods as a monotonic timeline, so a 3–1 final is 3–1 on every surface and its half-time line adds up.
+- **Adopted — stable fixture identity.** Fixture ids and scripts are seeded by league, teams and kick-off timestamp on a fixed UTC calendar, so a match does not change result when the board is refreshed.
+- **Evaluated, not adopted — trained attack/defence artifacts.** PuntersEdge's `training/artifacts/football.json` fits 24 clubs keyed by football-data.org ids. CaveBettor's 20 competitions use its own team registry, so the numbers cannot be joined without a mapping table; its global priors (home advantage ≈ 0.10 in log space, rho 0) are consistent with CaveBettor's Dixon–Coles configuration, which was left as-is.
+- **Evaluated, not adopted — market-anchored goal fitting.** Fitting λ from over/under prices requires a de-vigged two-way totals market per fixture. CaveBettor's prices are model-generated, so fitting the model back to its own prices would be circular; the idea is recorded for when a live odds provider is connected.
 
 ---
 
