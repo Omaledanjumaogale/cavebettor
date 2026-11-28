@@ -107,9 +107,18 @@ async function main() {
   });
   await check('installable app', `${base}/dashboard`, { type: 'text/html', contains: 'manifest.webmanifest' });
 
+  const expectedCommit = process.env.EXPECTED_COMMIT?.trim();
   const buildInfo = await fetch(`${base}/build-info.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  if (buildInfo?.commit) console.log(`✓ running commit ${buildInfo.commit.slice(0, 8)} (${buildInfo.builtAt})`);
-  else console.warn('! build-info.json missing or has no commit — cannot prove the deployed revision.');
+  if (buildInfo?.commit) {
+    console.log(`✓ running commit ${buildInfo.commit.slice(0, 8)} (${buildInfo.builtAt})`);
+    if (expectedCommit && buildInfo.commit !== expectedCommit) {
+      failures.push(`production is running ${buildInfo.commit.slice(0, 8)}, expected ${expectedCommit.slice(0, 8)}`);
+    }
+  } else if (expectedCommit) {
+    failures.push('build-info.json missing or has no commit — cannot prove the expected revision is live');
+  } else {
+    console.warn('! build-info.json missing or has no commit — cannot prove the deployed revision.');
+  }
 
   if (failures.length) {
     console.error(`\n${failures.length} production check(s) failed:`);

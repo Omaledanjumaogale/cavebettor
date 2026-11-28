@@ -97,26 +97,22 @@ npm run ci              # assets:unique + assets:check + pwa:verify + check + te
 npm run ci:install      # install the reviewed GitHub Actions workflow (needs workflow scope)
 ```
 
-The GitHub Actions workflow that mirrors `npm run ci` and publishes to Cloudflare is versioned at
-`ops/ci/github-actions.yml`. GitHub refuses workflow files from a token without the `workflow`
-scope, so it is installed rather than pushed directly:
+The deployment workflow lives at `.github/workflows/ci.yml`; `ops/ci/github-actions.yml` is the
+canonical template and `npm run ci:install` copies it into place (the `workflow` scope is required
+to push workflow files).
 
-```bash
-gh auth refresh -s workflow   # one-time, browser approval
-npm run ci:install            # copies ops/ci/github-actions.yml into .github/workflows/ and pushes
-```
-
-The workflow validates every push to `main` (assets, PWA contract, types, 83 unit tests, market
-audit, build, static pages) and publishes to Cloudflare when the deploy secrets exist:
+Every push to `main` validates assets, the PWA contract, types, unit tests, the market board and the
+production build, then deploys the Worker and verifies the live commit. Configure the two repository
+secrets once:
 
 ```bash
 gh secret set CLOUDFLARE_API_TOKEN --body "<token with Workers Scripts: Edit>"
 gh secret set CLOUDFLARE_ACCOUNT_ID --body "04ca38ff81dd0f1c0cdf584db3779aee"
 ```
 
-Without them the deploy job reports a notice and stays green, which is the default because this
-project publishes from the workstation with wrangler OAuth. The browser audits (`audit:schedule`,
-`audit:pwa`) run locally against the deployed URL.
+The deploy job fails when either secret is missing instead of staying green with a stale site, and
+`production:verify` refuses a deployment whose `build-info.json` does not match the pushed commit.
+The browser audits (`audit:schedule`, `audit:pwa`) still run locally against the deployed URL.
 
 ### Progressive web app
 
@@ -197,7 +193,11 @@ npm run deploy:cloudflare   # build + wrangler deploy (custom domain, Cloudflare
 npm run deploy:pages        # build + wrangler pages deploy (Pages project fallback)
 ```
 
-`wrangler.worker.jsonc` binds the custom domain `cavebettor.ewinproject.org`, serves the SvelteKit worker and mounts the build output as static assets. `wrangler.toml` keeps the equivalent Pages project (`cavebettor.pages.dev`) deployable. Both run the same SvelteKit output.
+`wrangler.worker.jsonc` owns the production custom domain `cavebettor.ewinproject.org`: it serves the
+SvelteKit worker and mounts the build output as static assets, with the R2 binding and scheduled
+workers attached. The Cloudflare project `cavebettor` (`cavebettor.pages.dev`) is a legacy
+direct-upload fallback with no Git integration and no production environment; `deploy:pages` is only
+for an explicit manual fallback deploy. GitHub Actions deploys the Worker, not the Pages project.
 
 Set production values as Worker/Pages secrets (never commit them):
 
